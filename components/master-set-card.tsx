@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 
@@ -21,32 +22,64 @@ export function MasterSetCard({
   totalCards,
   ownedCards,
   releaseDate,
+  logoUrl,
 }: MasterSetCardProps) {
   const progress = Math.round((ownedCards / totalCards) * 100)
+  const missing = totalCards - ownedCards
   
   return (
     <Link href={`/sets/${id}`}>
       <Card className="group overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
         <CardContent className="p-0">
-          <div className="relative aspect-[16/10] bg-secondary/50 flex items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="text-center p-4">
-              <p className="text-xs text-muted-foreground mb-1">{series}</p>
-              <h3 className="font-bold text-lg leading-tight">{name}</h3>
+          {/* Header with set info */}
+          <div className="p-4 border-b border-border/50">
+            <div className="flex items-center gap-3">
+              {logoUrl ? (
+                <div className="relative h-10 w-10 flex-shrink-0">
+                  <Image src={logoUrl} alt="" fill className="object-contain" />
+                </div>
+              ) : (
+                <div className="h-10 w-10 flex-shrink-0 rounded bg-secondary flex items-center justify-center">
+                  <span className="text-xs font-bold text-muted-foreground">
+                    {name.charAt(0)}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-secondary rounded mb-0.5">
+                  Pokemon
+                </span>
+                <h3 className="font-bold text-sm leading-tight truncate">{name}</h3>
+                <p className="text-xs text-muted-foreground truncate">{series}</p>
+              </div>
             </div>
           </div>
-          <div className="p-4 space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{releaseDate}</span>
-              <span className="font-medium text-primary">{progress}%</span>
+
+          {/* Stats row */}
+          <div className="px-4 py-3 flex items-center justify-between gap-2">
+            <div className="text-center">
+              <p className="text-xl font-bold">{ownedCards}</p>
+              <p className="text-[10px] text-muted-foreground">Owned</p>
             </div>
-            <Progress value={progress} className="h-2" />
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium">
-                {ownedCards} / {totalCards}
-              </span>
+            <div className="text-center">
+              <p className="text-xl font-bold">{totalCards}</p>
+              <p className="text-[10px] text-muted-foreground">Total</p>
             </div>
+            <div className="text-center">
+              <p className="text-xl font-bold text-primary">{progress}%</p>
+              <p className="text-[10px] text-muted-foreground">Complete</p>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="px-4 pb-3">
+            <Progress value={progress} className="h-1.5" />
+          </div>
+
+          {/* Footer */}
+          <div className="px-4 py-2 bg-secondary/30 flex items-center justify-between text-xs text-muted-foreground">
+            <span>{releaseDate}</span>
+            <span>{missing} missing</span>
           </div>
         </CardContent>
       </Card>

@@ -75,7 +75,7 @@ export default function HomePage() {
         </div>
 
         {/* Stats Overview */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border bg-card p-4">
             <p className="text-sm text-muted-foreground">Total Sets</p>
             <p className="mt-1 text-2xl font-bold">{MASTER_SETS.length}</p>
@@ -90,17 +90,6 @@ export default function HomePage() {
             <p className="text-sm text-muted-foreground">Total Cards</p>
             <p className="mt-1 text-2xl font-bold">
               {MASTER_SETS.reduce((acc, set) => acc + set.totalCards, 0)}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm text-muted-foreground">Completion</p>
-            <p className="mt-1 text-2xl font-bold text-primary">
-              {Math.round(
-                (MASTER_SETS.reduce((acc, set) => acc + set.ownedCards, 0) /
-                  MASTER_SETS.reduce((acc, set) => acc + set.totalCards, 0)) *
-                  100
-              )}
-              %
             </p>
           </div>
         </div>

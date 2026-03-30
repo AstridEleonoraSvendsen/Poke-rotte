@@ -1,61 +1,84 @@
 "use client"
 
-import { useState, use } from "react"
+import { useState, useEffect, use } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Header } from "@/components/header"
-import { PokemonCard } from "@/components/pokemon-card"
+import { BinderView } from "@/components/binder-view"
+import { RarityBreakdown } from "@/components/rarity-breakdown"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
-import { ArrowLeft, Search, Filter, Grid3X3, List } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import { ArrowLeft, Search, Filter, Grid3X3, BookOpen, Download, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 
-// Sample card data for Primal Clash (XY5)
-const SAMPLE_CARDS = [
-  { id: "xy5-1", name: "Weedle", number: "001/164", rarity: "Common" },
-  { id: "xy5-2", name: "Kakuna", number: "002/164", rarity: "Uncommon" },
-  { id: "xy5-3", name: "Beedrill", number: "003/164", rarity: "Rare" },
-  { id: "xy5-4", name: "Shroomish", number: "004/164", rarity: "Common" },
-  { id: "xy5-5", name: "Breloom", number: "005/164", rarity: "Uncommon" },
-  { id: "xy5-6", name: "Treecko", number: "006/164", rarity: "Common" },
-  { id: "xy5-7", name: "Grovyle", number: "007/164", rarity: "Uncommon" },
-  { id: "xy5-8", name: "Sceptile", number: "008/164", rarity: "Rare Holo" },
-  { id: "xy5-9", name: "Lotad", number: "009/164", rarity: "Common" },
-  { id: "xy5-10", name: "Lombre", number: "010/164", rarity: "Uncommon" },
-  { id: "xy5-11", name: "Ludicolo", number: "011/164", rarity: "Rare" },
-  { id: "xy5-12", name: "Seedot", number: "012/164", rarity: "Common" },
-  { id: "xy5-13", name: "Nuzleaf", number: "013/164", rarity: "Uncommon" },
-  { id: "xy5-14", name: "Shiftry", number: "014/164", rarity: "Rare" },
-  { id: "xy5-15", name: "Tropius", number: "015/164", rarity: "Uncommon" },
-  { id: "xy5-16", name: "Turtwig", number: "016/164", rarity: "Common" },
-  { id: "xy5-17", name: "Grotle", number: "017/164", rarity: "Uncommon" },
-  { id: "xy5-18", name: "Torterra", number: "018/164", rarity: "Rare Holo" },
-  { id: "xy5-19", name: "Cherubi", number: "019/164", rarity: "Common" },
-  { id: "xy5-20", name: "Cherrim", number: "020/164", rarity: "Uncommon" },
-  { id: "xy5-21", name: "Tangrowth", number: "021/164", rarity: "Rare" },
-  { id: "xy5-22", name: "Snivy", number: "022/164", rarity: "Common" },
-  { id: "xy5-23", name: "Servine", number: "023/164", rarity: "Uncommon" },
-  { id: "xy5-24", name: "Serperior", number: "024/164", rarity: "Rare Holo" },
-  { id: "xy5-85", name: "Kyogre EX", number: "085/164", rarity: "Rare Ultra" },
-  { id: "xy5-86", name: "Primal Kyogre EX", number: "086/164", rarity: "Rare Ultra" },
-  { id: "xy5-149", name: "Aggron EX", number: "149/164", rarity: "Secret Rare" },
-  { id: "xy5-150", name: "M Aggron EX", number: "150/164", rarity: "Secret Rare" },
-]
+interface PokemonCard {
+  id: string
+  name: string
+  number: string
+  rarity: string
+  images: {
+    small: string
+    large: string
+  }
+}
 
-// Simulate owned cards
-const INITIAL_OWNED = ["xy5-1", "xy5-2", "xy5-6", "xy5-8", "xy5-9", "xy5-16", "xy5-18", "xy5-22"]
+interface PokemonSet {
+  id: string
+  name: string
+  series: string
+  printedTotal: number
+  total: number
+  releaseDate: string
+  images: {
+    symbol: string
+    logo: string
+  }
+}
 
 export default function SetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
-  const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set(INITIAL_OWNED))
+  const [set, setSet] = useState<PokemonSet | null>(null)
+  const [cards, setCards] = useState<PokemonCard[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [viewMode, setViewMode] = useState<"grid" | "binder">("grid")
   const [filterMode, setFilterMode] = useState<"all" | "owned" | "missing">("all")
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const response = await fetch(`/api/pokemon/sets/${resolvedParams.id}`)
+        if (!response.ok) throw new Error("Failed to fetch set data")
+        const data = await response.json()
+        setSet(data.set)
+        setCards(data.cards)
+        
+        // Initialize some random owned cards for demo
+        const randomOwned = new Set<string>()
+        data.cards.forEach((card: PokemonCard, index: number) => {
+          if (Math.random() > 0.7) {
+            randomOwned.add(card.id)
+          }
+        })
+        setOwnedCards(randomOwned)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "An error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [resolvedParams.id])
 
   const toggleOwned = (cardId: string) => {
     setOwnedCards((prev) => {
@@ -69,7 +92,15 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     })
   }
 
-  const filteredCards = SAMPLE_CARDS.filter((card) => {
+  const selectAll = () => {
+    setOwnedCards(new Set(cards.map(c => c.id)))
+  }
+
+  const clearAll = () => {
+    setOwnedCards(new Set())
+  }
+
+  const filteredCards = cards.filter((card) => {
     const matchesSearch =
       card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       card.number.includes(searchQuery)
@@ -82,7 +113,37 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     return matchesSearch && matchesFilter
   })
 
-  const progress = Math.round((ownedCards.size / SAMPLE_CARDS.length) * 100)
+  const completionPercent = cards.length > 0 
+    ? Math.round((ownedCards.size / cards.length) * 100) 
+    : 0
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-24">
+          <div className="flex flex-col items-center gap-4">
+            <Spinner className="h-8 w-8" />
+            <p className="text-muted-foreground">Loading set data...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !set) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container mx-auto px-4 py-24 text-center">
+          <p className="text-destructive">{error || "Set not found"}</p>
+          <Link href="/" className="mt-4 inline-block text-primary hover:underline">
+            Back to Master Sets
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -98,60 +159,112 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           Back to My Sets
         </Link>
 
-        {/* Set Header */}
-        <div className="mb-8">
-          <p className="text-sm text-muted-foreground mb-1">XY Series</p>
-          <h1 className="text-3xl font-bold tracking-tight">Primal Clash</h1>
-          <p className="mt-2 text-muted-foreground">
-            Released February 2015 | {SAMPLE_CARDS.length} cards
-          </p>
-        </div>
-
-        {/* Progress Section */}
-        <div className="mb-8 rounded-lg border bg-card p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Collection Progress</span>
-                <span className="text-sm font-bold text-primary">{progress}%</span>
+        {/* Set Header - TCG MasterSet style */}
+        <div className="mb-6 rounded-lg border bg-card p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+            {/* Set Logo */}
+            <div className="flex items-center gap-4">
+              {set.images?.logo && (
+                <div className="relative h-16 w-16 flex-shrink-0">
+                  <Image
+                    src={set.images.logo}
+                    alt={set.name}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+              )}
+              <div>
+                <span className="inline-block px-2 py-0.5 text-xs font-medium bg-secondary rounded mb-1">
+                  Pokemon
+                </span>
+                <h1 className="text-2xl font-bold tracking-tight">{set.name}</h1>
+                <p className="text-sm text-muted-foreground">{set.series}</p>
               </div>
-              <Progress value={progress} className="h-3" />
             </div>
-            <div className="flex gap-6 sm:pl-8">
+
+            {/* Stats */}
+            <div className="flex items-center gap-8 lg:ml-auto">
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary">{ownedCards.size}</p>
+                <p className="text-3xl font-bold">{ownedCards.size}</p>
                 <p className="text-xs text-muted-foreground">Owned</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold">{SAMPLE_CARDS.length - ownedCards.size}</p>
-                <p className="text-xs text-muted-foreground">Missing</p>
+                <p className="text-3xl font-bold">{cards.length}</p>
+                <p className="text-xs text-muted-foreground">Total</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold">{SAMPLE_CARDS.length}</p>
-                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-3xl font-bold text-primary">{completionPercent}%</p>
+                <p className="text-xs text-muted-foreground">Complete</p>
+              </div>
+              
+              {/* Actions */}
+              <div className="hidden sm:flex items-center gap-2 pl-4 border-l border-border">
+                <Button variant="ghost" size="icon">
+                  <Download className="h-5 w-5" />
+                </Button>
+                <Button variant="ghost" size="icon">
+                  <Trash2 className="h-5 w-5" />
+                </Button>
               </div>
             </div>
           </div>
+          
+          {/* Progress bar */}
+          <Progress value={completionPercent} className="mt-4 h-2" />
+        </div>
+
+        {/* Rarity Breakdown */}
+        <div className="mb-6">
+          <RarityBreakdown cards={cards} ownedCards={ownedCards} />
         </div>
 
         {/* Toolbar */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search cards..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="flex items-center gap-2">
+            {/* Grid/Binder Toggle */}
+            <div className="flex rounded-lg border bg-secondary/50 p-1">
+              <button
+                onClick={() => setViewMode("grid")}
+                className={cn(
+                  "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                  viewMode === "grid" 
+                    ? "bg-background text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Grid
+              </button>
+              <button
+                onClick={() => setViewMode("binder")}
+                className={cn(
+                  "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                  viewMode === "binder" 
+                    ? "bg-background text-foreground shadow-sm" 
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Binder
+              </button>
+            </div>
           </div>
           
           <div className="flex items-center gap-2">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search cards..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-2">
                   <Filter className="h-4 w-4" />
-                  {filterMode === "all" ? "All Cards" : filterMode === "owned" ? "Owned" : "Missing"}
+                  {filterMode === "all" ? "All" : filterMode === "owned" ? "Owned" : "Missing"}
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -166,39 +279,55 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            
-            <div className="flex rounded-md border">
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-r-none"
-                onClick={() => setViewMode("grid")}
-              >
-                <Grid3X3 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="sm"
-                className="rounded-l-none"
-                onClick={() => setViewMode("list")}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
+
+            <Button variant="ghost" size="sm" onClick={selectAll}>
+              Select all
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clearAll}>
+              Clear all
+            </Button>
           </div>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {filteredCards.map((card) => (
-            <PokemonCard
-              key={card.id}
-              {...card}
-              owned={ownedCards.has(card.id)}
-              onToggleOwned={toggleOwned}
-            />
-          ))}
-        </div>
+        {/* Cards View */}
+        {viewMode === "grid" ? (
+          <div className="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+            {filteredCards.map((card) => (
+              <button
+                key={card.id}
+                onClick={() => toggleOwned(card.id)}
+                className={cn(
+                  "relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all",
+                  "hover:scale-105 hover:z-10 hover:shadow-xl",
+                  !ownedCards.has(card.id) && "opacity-40 grayscale"
+                )}
+              >
+                <Image
+                  src={card.images.small}
+                  alt={card.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
+                />
+                {/* Ownership badge */}
+                <div className={cn(
+                  "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
+                  ownedCards.has(card.id) 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-muted/80 text-muted-foreground"
+                )}>
+                  {ownedCards.has(card.id) ? "1/1" : "0/1"}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <BinderView 
+            cards={filteredCards} 
+            ownedCards={ownedCards} 
+            onToggleOwned={toggleOwned} 
+          />
+        )}
 
         {filteredCards.length === 0 && (
           <div className="py-12 text-center">
