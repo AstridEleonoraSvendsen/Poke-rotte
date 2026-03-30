@@ -8,6 +8,8 @@ interface Card {
   name: string
   number: string
   rarity: string
+  variant: "standard" | "reverse_holo"
+  isReverseHolo: boolean
   images: {
     small: string
     large: string
@@ -101,7 +103,7 @@ function BinderCard({ card, owned, onToggle }: BinderCardProps) {
     <button
       onClick={onToggle}
       className={cn(
-        "relative aspect-[2.5/3.5] rounded-md overflow-hidden transition-all",
+        "group relative aspect-[2.5/3.5] rounded-md overflow-hidden transition-all",
         "hover:scale-105 hover:z-10 hover:shadow-lg",
         !owned && "opacity-50 grayscale"
       )}
@@ -113,6 +115,15 @@ function BinderCard({ card, owned, onToggle }: BinderCardProps) {
         className="object-cover"
         sizes="(max-width: 768px) 30vw, 150px"
       />
+      {/* Reverse Holo indicator */}
+      {card.isReverseHolo && (
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
+      )}
+      {/* Card name tooltip on hover */}
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <p className="text-[9px] text-white font-medium truncate">{card.name}</p>
+        <p className="text-[8px] text-white/70">#{card.number}</p>
+      </div>
       {/* Ownership badge */}
       <div className={cn(
         "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",

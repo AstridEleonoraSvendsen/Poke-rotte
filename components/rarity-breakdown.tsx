@@ -5,6 +5,7 @@ import { Progress } from "@/components/ui/progress"
 interface Card {
   id: string
   rarity: string
+  isReverseHolo?: boolean
 }
 
 interface RarityBreakdownProps {

@@ -24,6 +24,8 @@ interface PokemonCard {
   name: string
   number: string
   rarity: string
+  variant: "standard" | "reverse_holo"
+  isReverseHolo: boolean
   images: {
     small: string
     large: string
@@ -43,10 +45,17 @@ interface PokemonSet {
   }
 }
 
+interface SetStats {
+  totalCards: number
+  regularCards: number
+  secretCards: number
+}
+
 export default function SetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const [set, setSet] = useState<PokemonSet | null>(null)
   const [cards, setCards] = useState<PokemonCard[]>([])
+  const [stats, setStats] = useState<SetStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set())
@@ -62,15 +71,10 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         const data = await response.json()
         setSet(data.set)
         setCards(data.cards)
+        setStats(data.stats)
         
-        // Initialize some random owned cards for demo
-        const randomOwned = new Set<string>()
-        data.cards.forEach((card: PokemonCard, index: number) => {
-          if (Math.random() > 0.7) {
-            randomOwned.add(card.id)
-          }
-        })
-        setOwnedCards(randomOwned)
+        // Initialize empty owned cards (user starts fresh)
+        setOwnedCards(new Set())
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
       } finally {
@@ -184,19 +188,49 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             </div>
 
             {/* Stats */}
-            <div className="flex items-center gap-8 lg:ml-auto">
+            <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
               <div className="text-center">
-                <p className="text-3xl font-bold">{ownedCards.size}</p>
-                <p className="text-xs text-muted-foreground">Owned</p>
+                <p className="text-2xl font-bold text-primary">{completionPercent}%</p>
+                <p className="text-xs text-muted-foreground">Complete</p>
               </div>
               <div className="text-center">
-                <p className="text-3xl font-bold">{cards.length}</p>
+                <p className="text-2xl font-bold">
+                  <span className="text-foreground">{ownedCards.size}</span>
+                  <span className="text-muted-foreground">/{cards.length}</span>
+                </p>
                 <p className="text-xs text-muted-foreground">Total</p>
               </div>
               <div className="text-center">
-                <p className="text-3xl font-bold text-primary">{completionPercent}%</p>
-                <p className="text-xs text-muted-foreground">Complete</p>
+                <p className="text-2xl font-bold">
+                  <span className="text-foreground">
+                    {ownedCards.size > 0 
+                      ? cards.filter(c => !c.isReverseHolo && ownedCards.has(c.id)).length 
+                      : 0}
+                  </span>
+                  <span className="text-muted-foreground">/{stats?.regularCards || 0}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">Cards</p>
               </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">
+                  <span className="text-foreground">
+                    {cards.filter(c => c.isReverseHolo && ownedCards.has(c.id)).length}
+                  </span>
+                  <span className="text-muted-foreground">
+                    /{cards.filter(c => c.isReverseHolo).length}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">Reverse Holo</p>
+              </div>
+              {stats && stats.secretCards > 0 && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold">
+                    <span className="text-foreground">0</span>
+                    <span className="text-muted-foreground">/{stats.secretCards}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">Secret</p>
+                </div>
+              )}
               
               {/* Actions */}
               <div className="hidden sm:flex items-center gap-2 pl-4 border-l border-border">
@@ -297,7 +331,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 key={card.id}
                 onClick={() => toggleOwned(card.id)}
                 className={cn(
-                  "relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all",
+                  "group relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all",
                   "hover:scale-105 hover:z-10 hover:shadow-xl",
                   !ownedCards.has(card.id) && "opacity-40 grayscale"
                 )}
@@ -309,6 +343,15 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   className="object-cover"
                   sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
                 />
+                {/* Reverse Holo indicator */}
+                {card.isReverseHolo && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
+                )}
+                {/* Card name tooltip on hover */}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-[10px] text-white font-medium truncate">{card.name}</p>
+                  <p className="text-[9px] text-white/70">#{card.number}</p>
+                </div>
                 {/* Ownership badge */}
                 <div className={cn(
                   "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
