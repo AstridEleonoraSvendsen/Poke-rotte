@@ -49,12 +49,32 @@ interface ApiResponse {
   }
 }
 
-// Rarities that typically have reverse holo variants
-const REVERSE_HOLO_ELIGIBLE_RARITIES = [
-  "Common",
-  "Uncommon",
-  "Rare",
-  "Rare Holo",
+// Rarities that DON'T have reverse holo variants (ultra rares, secrets, etc.)
+const NO_REVERSE_HOLO_RARITIES = [
+  "Rare Holo EX",
+  "Rare Ultra",
+  "Rare Secret",
+  "Rare Holo GX",
+  "Rare Holo V",
+  "Rare Holo VMAX",
+  "Rare VSTAR",
+  "Rare Shiny",
+  "Rare Shiny GX",
+  "Rare Shining",
+  "Rare Rainbow",
+  "Rare Prism Star",
+  "LEGEND",
+  "Amazing Rare",
+  "Radiant Rare",
+  "Double Rare",
+  "Illustration Rare",
+  "Special Illustration Rare",
+  "Hyper Rare",
+  "Ultra Rare",
+  "Shiny Rare",
+  "Shiny Ultra Rare",
+  "ACE SPEC Rare",
+  "Trainer Gallery Rare Holo",
 ]
 
 export async function GET(
@@ -108,6 +128,7 @@ export async function GET(
 
     // Generate master set cards including reverse holos
     const masterSetCards: PokemonCard[] = []
+    const printedTotal = set.printedTotal || 0
 
     // Sort cards by number (handle numeric and alphanumeric)
     allCards.sort((a, b) => {
@@ -130,11 +151,13 @@ export async function GET(
       })
 
       // Add reverse holo variant if eligible
-      // Reverse holos exist for most Pokemon cards with Common, Uncommon, Rare rarities
-      // Trainer/Energy cards also sometimes have reverse holos
-      const isEligibleForReverseHolo = 
-        REVERSE_HOLO_ELIGIBLE_RARITIES.includes(card.rarity) &&
-        card.supertype === "Pokémon"
+      // Most cards in modern sets (XY onwards) have reverse holos EXCEPT:
+      // - Secret rares (card number > printedTotal)
+      // - Ultra rares, full arts, rainbow rares, etc.
+      const cardNumber = parseInt(card.number.replace(/\D/g, '')) || 0
+      const isSecretRare = cardNumber > printedTotal
+      const isUltraRareOrHigher = NO_REVERSE_HOLO_RARITIES.includes(card.rarity)
+      const isEligibleForReverseHolo = !isSecretRare && !isUltraRareOrHigher
 
       if (isEligibleForReverseHolo) {
         masterSetCards.push({
@@ -150,7 +173,6 @@ export async function GET(
     }
 
     // Calculate stats
-    const printedTotal = set.printedTotal || 0
     const secretCards = allCards.filter(c => {
       const num = parseInt(c.number.replace(/\D/g, '')) || 0
       return num > printedTotal

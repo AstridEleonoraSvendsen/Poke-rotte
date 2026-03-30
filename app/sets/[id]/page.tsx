@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Filter, Grid3X3, BookOpen, Download, Trash2 } from "lucide-react"
+import { ArrowLeft, Search, Download, Trash2, ArrowUpDown } from "lucide-react"
+
+type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,7 +63,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "binder">("grid")
-  const [filterMode, setFilterMode] = useState<"all" | "owned" | "missing">("all")
+  const [sortBy, setSortBy] = useState<SortOption>("number-asc")
 
   useEffect(() => {
     async function fetchData() {
@@ -104,18 +106,61 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     setOwnedCards(new Set())
   }
 
-  const filteredCards = cards.filter((card) => {
-    const matchesSearch =
-      card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      card.number.includes(searchQuery)
-    
-    const matchesFilter =
-      filterMode === "all" ||
-      (filterMode === "owned" && ownedCards.has(card.id)) ||
-      (filterMode === "missing" && !ownedCards.has(card.id))
+  // Sort options labels
+  const sortLabels: Record<SortOption, string> = {
+    "number-asc": "Card Number Lo-Hi",
+    "number-desc": "Card Number Hi-Lo",
+    "alpha": "Alphabetical",
+    "owned": "Cards I Own",
+    "missing": "Cards I Do Not Own",
+  }
 
-    return matchesSearch && matchesFilter
-  })
+  const filteredAndSortedCards = cards
+    .filter((card) => {
+      const matchesSearch =
+        card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        card.number.includes(searchQuery)
+      return matchesSearch
+    })
+    .sort((a, b) => {
+      switch (sortBy) {
+        case "number-asc": {
+          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
+          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          if (numA !== numB) return numA - numB
+          // Reverse holos after standard
+          return a.isReverseHolo ? 1 : -1
+        }
+        case "number-desc": {
+          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
+          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          if (numA !== numB) return numB - numA
+          return a.isReverseHolo ? 1 : -1
+        }
+        case "alpha":
+          return a.name.localeCompare(b.name)
+        case "owned": {
+          // Owned cards first
+          const aOwned = ownedCards.has(a.id) ? 0 : 1
+          const bOwned = ownedCards.has(b.id) ? 0 : 1
+          if (aOwned !== bOwned) return aOwned - bOwned
+          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
+          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          return numA - numB
+        }
+        case "missing": {
+          // Missing cards first
+          const aMissing = ownedCards.has(a.id) ? 1 : 0
+          const bMissing = ownedCards.has(b.id) ? 1 : 0
+          if (aMissing !== bMissing) return aMissing - bMissing
+          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
+          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          return numA - numB
+        }
+        default:
+          return 0
+      }
+    })
 
   const completionPercent = cards.length > 0 
     ? Math.round((ownedCards.size / cards.length) * 100) 
@@ -254,79 +299,96 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         </div>
 
         {/* Toolbar */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2">
-            {/* Grid/Binder Toggle */}
-            <div className="flex rounded-lg border bg-secondary/50 p-1">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={cn(
-                  "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                  viewMode === "grid" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setViewMode("binder")}
-                className={cn(
-                  "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                  viewMode === "binder" 
-                    ? "bg-background text-foreground shadow-sm" 
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Binder
-              </button>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 max-w-xs">
+        <div className="mb-6 flex flex-col gap-4">
+          {/* Search and Sort Row */}
+          <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+            {/* Search Bar */}
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search cards..."
+                placeholder="Find a card..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className="pl-10 bg-card"
               />
             </div>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <Filter className="h-4 w-4" />
-                  {filterMode === "all" ? "All" : filterMode === "owned" ? "Owned" : "Missing"}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setFilterMode("all")}>
-                  All Cards
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setFilterMode("owned")}>
-                  Owned
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setFilterMode("missing")}>
-                  Missing
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
 
-            <Button variant="ghost" size="sm" onClick={selectAll}>
-              Select all
-            </Button>
-            <Button variant="ghost" size="sm" onClick={clearAll}>
-              Clear all
-            </Button>
+            {/* Sort By Dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground whitespace-nowrap">Sort By</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 min-w-[180px] justify-between">
+                    {sortLabels[sortBy]}
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[200px]">
+                  <DropdownMenuItem onClick={() => setSortBy("number-asc")}>
+                    Card Number Lo-Hi
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("number-desc")}>
+                    Card Number Hi-Lo
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("alpha")}>
+                    Alphabetical
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("owned")}>
+                    Cards I Own
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("missing")}>
+                    Cards I Do Not Own
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Grid/Binder Toggle and Actions Row */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              {/* Grid/Binder Toggle */}
+              <div className="flex rounded-lg border bg-secondary/50 p-1">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={cn(
+                    "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                    viewMode === "grid" 
+                      ? "bg-background text-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Grid
+                </button>
+                <button
+                  onClick={() => setViewMode("binder")}
+                  className={cn(
+                    "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
+                    viewMode === "binder" 
+                      ? "bg-background text-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Binder
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={selectAll}>
+                Select all
+              </Button>
+              <Button variant="ghost" size="sm" onClick={clearAll}>
+                Clear all
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Cards View */}
         {viewMode === "grid" ? (
           <div className="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-            {filteredCards.map((card) => (
+            {filteredAndSortedCards.map((card) => (
               <button
                 key={card.id}
                 onClick={() => toggleOwned(card.id)}
@@ -366,13 +428,13 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           </div>
         ) : (
           <BinderView 
-            cards={filteredCards} 
+            cards={filteredAndSortedCards} 
             ownedCards={ownedCards} 
             onToggleOwned={toggleOwned} 
           />
         )}
 
-        {filteredCards.length === 0 && (
+        {filteredAndSortedCards.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-muted-foreground">No cards found matching your criteria</p>
           </div>
