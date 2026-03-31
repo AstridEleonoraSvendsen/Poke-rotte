@@ -1,6 +1,7 @@
 "use client"
 
 import Image from "next/image"
+import { Heart } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface Card {
@@ -19,20 +20,14 @@ interface Card {
 interface BinderViewProps {
   cards: Card[]
   ownedCards: Set<string>
+  wishlist?: Set<string>
   onToggleOwned: (cardId: string) => void
+  onToggleWishlist?: (cardId: string, e: React.MouseEvent) => void
 }
 
-export function BinderView({ cards, ownedCards, onToggleOwned }: BinderViewProps) {
-  // 9-pocket pages: 3 columns x 3 rows = 9 cards per page
-  // Each "side" shows 2 pages (left and right), so 18 cards per side
-  // But masterset.dk shows 12 per side (3x4), let's follow that
-  const CARDS_PER_PAGE = 12 // 3 columns x 4 rows
-  const PAGES_PER_SIDE = 1
+export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggleWishlist }: BinderViewProps) {
+  const CARDS_PER_SIDE = 24
 
-  // Group cards into sides (each side = 2 pages of 12 cards each = 24 cards, but screenshot shows 12 per visual section)
-  // Looking at the screenshot more closely: each "SIDE" has two 3x4 grids side by side
-  const CARDS_PER_SIDE = 24 // 12 cards x 2 pages shown side by side
-  
   const sides: Card[][] = []
   for (let i = 0; i < cards.length; i += CARDS_PER_SIDE) {
     sides.push(cards.slice(i, i + CARDS_PER_SIDE))
@@ -43,7 +38,7 @@ export function BinderView({ cards, ownedCards, onToggleOwned }: BinderViewProps
       {sides.map((sideCards, sideIndex) => {
         const leftPage = sideCards.slice(0, 12)
         const rightPage = sideCards.slice(12, 24)
-        
+
         return (
           <div key={sideIndex} className="rounded-lg border bg-card p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -59,7 +54,9 @@ export function BinderView({ cards, ownedCards, onToggleOwned }: BinderViewProps
                       key={card.id}
                       card={card}
                       owned={ownedCards.has(card.id)}
+                      wishlisted={wishlist?.has(card.id) ?? false}
                       onToggle={() => onToggleOwned(card.id)}
+                      onToggleWishlist={onToggleWishlist ? (e) => onToggleWishlist(card.id, e) : undefined}
                     />
                   ))}
                 </div>
@@ -78,7 +75,9 @@ export function BinderView({ cards, ownedCards, onToggleOwned }: BinderViewProps
                         key={card.id}
                         card={card}
                         owned={ownedCards.has(card.id)}
+                        wishlisted={wishlist?.has(card.id) ?? false}
                         onToggle={() => onToggleOwned(card.id)}
+                        onToggleWishlist={onToggleWishlist ? (e) => onToggleWishlist(card.id, e) : undefined}
                       />
                     ))}
                   </div>
@@ -95,10 +94,12 @@ export function BinderView({ cards, ownedCards, onToggleOwned }: BinderViewProps
 interface BinderCardProps {
   card: Card
   owned: boolean
+  wishlisted: boolean
   onToggle: () => void
+  onToggleWishlist?: (e: React.MouseEvent) => void
 }
 
-function BinderCard({ card, owned, onToggle }: BinderCardProps) {
+function BinderCard({ card, owned, wishlisted, onToggle, onToggleWishlist }: BinderCardProps) {
   return (
     <button
       onClick={onToggle}
@@ -115,22 +116,33 @@ function BinderCard({ card, owned, onToggle }: BinderCardProps) {
         className="object-cover"
         sizes="(max-width: 768px) 30vw, 150px"
       />
-      {/* Reverse Holo indicator */}
       {card.isReverseHolo && (
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
       )}
-      {/* Card name tooltip on hover */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <p className="text-[9px] text-white font-medium truncate">{card.name}</p>
         <p className="text-[8px] text-white/70">#{card.number}</p>
       </div>
-      {/* Ownership badge */}
       <div className={cn(
         "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
         owned ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
       )}>
         {owned ? "1/1" : "0/1"}
       </div>
+      {onToggleWishlist && (
+        <button
+          onClick={onToggleWishlist}
+          className={cn(
+            "absolute top-1 left-1 p-1 rounded transition-all",
+            wishlisted ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+        >
+          <Heart className={cn(
+            "h-3 w-3 drop-shadow",
+            wishlisted ? "fill-pink-500 text-pink-500" : "text-white"
+          )} />
+        </button>
+      )}
     </button>
   )
 }
