@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Download, Trash2, ArrowUpDown } from "lucide-react"
+import { ArrowLeft, Search, Download, Trash2, ArrowUpDown, Heart } from "lucide-react"
+import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 
 type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 import {
@@ -55,28 +56,35 @@ interface SetStats {
 
 export default function SetDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
+  const setId = resolvedParams.id
+
   const [set, setSet] = useState<PokemonSet | null>(null)
   const [cards, setCards] = useState<PokemonCard[]>([])
   const [stats, setStats] = useState<SetStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set())
+  const [wishlist, setWishlist] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "binder">("grid")
   const [sortBy, setSortBy] = useState<SortOption>("number-asc")
+  const [showWishlistOnly, setShowWishlistOnly] = useState(false)
+  const [saveIndicator, setSaveIndicator] = useState(false)
+
+  useEffect(() => {
+    setOwnedCards(loadOwnedCards(setId))
+    setWishlist(loadWishlist(setId))
+  }, [setId])
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const response = await fetch(`/api/pokemon/sets/${resolvedParams.id}`)
+        const response = await fetch(`/api/pokemon/sets/${setId}`)
         if (!response.ok) throw new Error("Failed to fetch set data")
         const data = await response.json()
         setSet(data.set)
         setCards(data.cards)
         setStats(data.stats)
-        
-        // Initialize empty owned cards (user starts fresh)
-        setOwnedCards(new Set())
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
       } finally {
@@ -84,7 +92,12 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
       }
     }
     fetchData()
-  }, [resolvedParams.id])
+  }, [setId])
+
+  const flashSaveIndicator = () => {
+    setSaveIndicator(true)
+    setTimeout(() => setSaveIndicator(false), 1200)
+  }
 
   const toggleOwned = (cardId: string) => {
     setOwnedCards((prev) => {
@@ -93,20 +106,47 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         next.delete(cardId)
       } else {
         next.add(cardId)
+        setWishlist((wl) => {
+          const wlNext = new Set(wl)
+          wlNext.delete(cardId)
+          saveWishlist(setId, wlNext)
+          return wlNext
+        })
       }
+      saveOwnedCards(setId, next)
+      flashSaveIndicator()
       return next
     })
   }
 
   const selectAll = () => {
-    setOwnedCards(new Set(cards.map(c => c.id)))
+    const all = new Set(cards.map((c) => c.id))
+    setOwnedCards(all)
+    saveOwnedCards(setId, all)
+    flashSaveIndicator()
   }
 
   const clearAll = () => {
-    setOwnedCards(new Set())
+    const empty = new Set<string>()
+    setOwnedCards(empty)
+    saveOwnedCards(setId, empty)
+    flashSaveIndicator()
   }
 
-  // Sort options labels
+  const toggleWishlist = (cardId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setWishlist((prev) => {
+      const next = new Set(prev)
+      if (next.has(cardId)) {
+        next.delete(cardId)
+      } else {
+        next.add(cardId)
+      }
+      saveWishlist(setId, next)
+      return next
+    })
+  }
+
   const sortLabels: Record<SortOption, string> = {
     "number-asc": "Card Number Lo-Hi",
     "number-desc": "Card Number Hi-Lo",
@@ -120,41 +160,39 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
       const matchesSearch =
         card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         card.number.includes(searchQuery)
-      return matchesSearch
+      const matchesWishlist = showWishlistOnly ? wishlist.has(card.id) : true
+      return matchesSearch && matchesWishlist
     })
     .sort((a, b) => {
       switch (sortBy) {
         case "number-asc": {
-          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
-          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
+          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
           if (numA !== numB) return numA - numB
-          // Reverse holos after standard
           return a.isReverseHolo ? 1 : -1
         }
         case "number-desc": {
-          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
-          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
+          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
           if (numA !== numB) return numB - numA
           return a.isReverseHolo ? 1 : -1
         }
         case "alpha":
           return a.name.localeCompare(b.name)
         case "owned": {
-          // Owned cards first
           const aOwned = ownedCards.has(a.id) ? 0 : 1
           const bOwned = ownedCards.has(b.id) ? 0 : 1
           if (aOwned !== bOwned) return aOwned - bOwned
-          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
-          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
+          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
           return numA - numB
         }
         case "missing": {
-          // Missing cards first
           const aMissing = ownedCards.has(a.id) ? 1 : 0
           const bMissing = ownedCards.has(b.id) ? 1 : 0
           if (aMissing !== bMissing) return aMissing - bMissing
-          const numA = parseInt(a.number.replace(/\D/g, '')) || 0
-          const numB = parseInt(b.number.replace(/\D/g, '')) || 0
+          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
+          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
           return numA - numB
         }
         default:
@@ -162,9 +200,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
       }
     })
 
-  const completionPercent = cards.length > 0 
-    ? Math.round((ownedCards.size / cards.length) * 100) 
-    : 0
+  const completionPercent =
+    cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
 
   if (loading) {
     return (
@@ -197,9 +234,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container mx-auto px-4 py-8">
-        {/* Back Link */}
         <Link
           href="/"
           className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -208,19 +244,13 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           Back to My Sets
         </Link>
 
-        {/* Set Header - TCG MasterSet style */}
+        {/* Set Header */}
         <div className="mb-6 rounded-lg border bg-card p-6">
           <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-            {/* Set Logo */}
             <div className="flex items-center gap-4">
               {set.images?.logo && (
                 <div className="relative h-16 w-16 flex-shrink-0">
-                  <Image
-                    src={set.images.logo}
-                    alt={set.name}
-                    fill
-                    className="object-contain"
-                  />
+                  <Image src={set.images.logo} alt={set.name} fill className="object-contain" />
                 </div>
               )}
               <div>
@@ -232,7 +262,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
               </div>
             </div>
 
-            {/* Stats */}
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
               <div className="text-center">
                 <p className="text-2xl font-bold text-primary">{completionPercent}%</p>
@@ -248,9 +277,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
               <div className="text-center">
                 <p className="text-2xl font-bold">
                   <span className="text-foreground">
-                    {ownedCards.size > 0 
-                      ? cards.filter(c => !c.isReverseHolo && ownedCards.has(c.id)).length 
-                      : 0}
+                    {cards.filter((c) => !c.isReverseHolo && ownedCards.has(c.id)).length}
                   </span>
                   <span className="text-muted-foreground">/{stats?.regularCards || 0}</span>
                 </p>
@@ -259,10 +286,10 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
               <div className="text-center">
                 <p className="text-2xl font-bold">
                   <span className="text-foreground">
-                    {cards.filter(c => c.isReverseHolo && ownedCards.has(c.id)).length}
+                    {cards.filter((c) => c.isReverseHolo && ownedCards.has(c.id)).length}
                   </span>
                   <span className="text-muted-foreground">
-                    /{cards.filter(c => c.isReverseHolo).length}
+                    /{cards.filter((c) => c.isReverseHolo).length}
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground">Reverse Holo</p>
@@ -276,20 +303,31 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   <p className="text-xs text-muted-foreground">Secret</p>
                 </div>
               )}
-              
-              {/* Actions */}
+              {wishlist.size > 0 && (
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-pink-500">{wishlist.size}</p>
+                  <p className="text-xs text-muted-foreground">Wishlisted</p>
+                </div>
+              )}
+
               <div className="hidden sm:flex items-center gap-2 pl-4 border-l border-border">
-                <Button variant="ghost" size="icon">
+                <span
+                  className={cn(
+                    "text-xs text-primary transition-opacity duration-300",
+                    saveIndicator ? "opacity-100" : "opacity-0"
+                  )}
+                >
+                  Saved ✓
+                </span>
+                <Button variant="ghost" size="icon" title="Export collection">
                   <Download className="h-5 w-5" />
                 </Button>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" title="Clear all owned cards" onClick={clearAll}>
                   <Trash2 className="h-5 w-5" />
                 </Button>
               </div>
             </div>
           </div>
-          
-          {/* Progress bar */}
           <Progress value={completionPercent} className="mt-4 h-2" />
         </div>
 
@@ -300,9 +338,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
 
         {/* Toolbar */}
         <div className="mb-6 flex flex-col gap-4">
-          {/* Search and Sort Row */}
           <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-            {/* Search Bar */}
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -312,8 +348,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 className="pl-10 bg-card"
               />
             </div>
-
-            {/* Sort By Dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground whitespace-nowrap">Sort By</span>
               <DropdownMenu>
@@ -324,38 +358,24 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[200px]">
-                  <DropdownMenuItem onClick={() => setSortBy("number-asc")}>
-                    Card Number Lo-Hi
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("number-desc")}>
-                    Card Number Hi-Lo
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("alpha")}>
-                    Alphabetical
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("owned")}>
-                    Cards I Own
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy("missing")}>
-                    Cards I Do Not Own
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("number-asc")}>Card Number Lo-Hi</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("number-desc")}>Card Number Hi-Lo</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("alpha")}>Alphabetical</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("owned")}>Cards I Own</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortBy("missing")}>Cards I Do Not Own</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
 
-          {/* Grid/Binder Toggle and Actions Row */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              {/* Grid/Binder Toggle */}
               <div className="flex rounded-lg border bg-secondary/50 p-1">
                 <button
                   onClick={() => setViewMode("grid")}
                   className={cn(
                     "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                    viewMode === "grid" 
-                      ? "bg-background text-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground"
+                    viewMode === "grid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   Grid
@@ -364,23 +384,30 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   onClick={() => setViewMode("binder")}
                   className={cn(
                     "px-4 py-1.5 text-sm font-medium rounded-md transition-colors",
-                    viewMode === "binder" 
-                      ? "bg-background text-foreground shadow-sm" 
-                      : "text-muted-foreground hover:text-foreground"
+                    viewMode === "binder" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   Binder
                 </button>
               </div>
+
+              <button
+                onClick={() => setShowWishlistOnly((v) => !v)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors border",
+                  showWishlistOnly
+                    ? "bg-pink-500/10 text-pink-500 border-pink-500/30"
+                    : "text-muted-foreground hover:text-foreground border-border"
+                )}
+              >
+                <Heart className={cn("h-3.5 w-3.5", showWishlistOnly && "fill-pink-500")} />
+                Wishlist {wishlist.size > 0 && `(${wishlist.size})`}
+              </button>
             </div>
-            
+
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={selectAll}>
-                Select all
-              </Button>
-              <Button variant="ghost" size="sm" onClick={clearAll}>
-                Clear all
-              </Button>
+              <Button variant="ghost" size="sm" onClick={selectAll}>Select all</Button>
+              <Button variant="ghost" size="sm" onClick={clearAll}>Clear all</Button>
             </div>
           </div>
         </div>
@@ -405,38 +432,52 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   className="object-cover"
                   sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
                 />
-                {/* Reverse Holo indicator */}
                 {card.isReverseHolo && (
                   <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
                 )}
-                {/* Card name tooltip on hover */}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                   <p className="text-[10px] text-white font-medium truncate">{card.name}</p>
                   <p className="text-[9px] text-white/70">#{card.number}</p>
                 </div>
-                {/* Ownership badge */}
                 <div className={cn(
                   "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
-                  ownedCards.has(card.id) 
-                    ? "bg-primary text-primary-foreground" 
-                    : "bg-muted/80 text-muted-foreground"
+                  ownedCards.has(card.id) ? "bg-primary text-primary-foreground" : "bg-muted/80 text-muted-foreground"
                 )}>
                   {ownedCards.has(card.id) ? "1/1" : "0/1"}
                 </div>
+                <button
+                  onClick={(e) => toggleWishlist(card.id, e)}
+                  className={cn(
+                    "absolute top-1 left-1 p-1 rounded transition-all",
+                    wishlist.has(card.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  )}
+                  title={wishlist.has(card.id) ? "Remove from wishlist" : "Add to wishlist"}
+                >
+                  <Heart className={cn(
+                    "h-3.5 w-3.5 drop-shadow",
+                    wishlist.has(card.id) ? "fill-pink-500 text-pink-500" : "text-white"
+                  )} />
+                </button>
               </button>
             ))}
           </div>
         ) : (
-          <BinderView 
-            cards={filteredAndSortedCards} 
-            ownedCards={ownedCards} 
-            onToggleOwned={toggleOwned} 
+          <BinderView
+            cards={filteredAndSortedCards}
+            ownedCards={ownedCards}
+            wishlist={wishlist}
+            onToggleOwned={toggleOwned}
+            onToggleWishlist={(id, e) => toggleWishlist(id, e)}
           />
         )}
 
         {filteredAndSortedCards.length === 0 && (
           <div className="py-12 text-center">
-            <p className="text-muted-foreground">No cards found matching your criteria</p>
+            <p className="text-muted-foreground">
+              {showWishlistOnly
+                ? "No cards in your wishlist yet. Hover a card and click the heart icon to add one."
+                : "No cards found matching your criteria"}
+            </p>
           </div>
         )}
       </main>
