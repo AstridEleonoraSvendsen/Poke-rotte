@@ -5,8 +5,6 @@
 const STORAGE_PREFIX = "owned:"
 const WISHLIST_PREFIX = "wishlist:"
 
-// ─── Owned cards ────────────────────────────────────────────────────────────
-
 export function loadOwnedCards(setId: string): Set<string> {
   if (typeof window === "undefined") return new Set()
   try {
@@ -23,12 +21,8 @@ export function saveOwnedCards(setId: string, owned: Set<string>): void {
   if (typeof window === "undefined") return
   try {
     localStorage.setItem(STORAGE_PREFIX + setId, JSON.stringify([...owned]))
-  } catch {
-    // localStorage can be unavailable in some browser configs — fail silently
-  }
+  } catch {}
 }
-
-// ─── Wishlist ────────────────────────────────────────────────────────────────
 
 export function loadWishlist(setId: string): Set<string> {
   if (typeof window === "undefined") return new Set()
@@ -49,17 +43,10 @@ export function saveWishlist(setId: string, wishlist: Set<string>): void {
   } catch {}
 }
 
-// ─── Summary (for homepage stats) ───────────────────────────────────────────
-
-/** Returns how many cards are owned for a given set, reading from localStorage. */
 export function getOwnedCount(setId: string): number {
   return loadOwnedCards(setId).size
 }
 
-/**
- * Reads all "owned:*" keys from localStorage and returns a map of
- * setId → ownedCount. Useful for the homepage overview.
- */
 export function getAllOwnedCounts(): Record<string, number> {
   if (typeof window === "undefined") return {}
   const result: Record<string, number> = {}
