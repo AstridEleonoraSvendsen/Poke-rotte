@@ -1,56 +1,50 @@
 import { NextResponse } from "next/server"
 
-interface PokemonSet {
-  id: string
-  name: string
-  series: string
-  printedTotal: number
-  total: number
-  releaseDate: string
-  images: {
-    symbol: string
-    logo: string
-  }
-}
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const query = searchParams.get("q")
 
-export async function GET() {
+  if (!query || query.trim().length < 2) {
+    return NextResponse.json({ cards: [] })
+  }
+
   try {
     const response = await fetch(
-      "https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate",
+      `https://api.pokemontcg.io/v2/cards?q=name:"${encodeURIComponent(query)}"&orderBy=-set.releaseDate&pageSize=30`,
       {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        next: { revalidate: 3600 }, // Cache for 1 hour
+        headers: { "Content-Type": "application/json" },
+        next: { revalidate: 300 },
       }
     )
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: "Failed to fetch sets" },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: "Search failed" }, { status: 500 })
     }
 
     const data = await response.json()
-    const sets: PokemonSet[] = data.data || []
 
-    // Group sets by series
-    const seriesGroups = sets.reduce((acc, set) => {
-      const series = set.series || "Other"
-      if (!acc[series]) {
-        acc[series] = []
-      }
-      acc[series].push(set)
-      return acc
-    }, {} as Record<string, PokemonSet[]>)
+    const cards = (data.data || []).map((card: any) => ({
+      id: card.id,
+      name: card.name,
+      number: card.number,
+      rarity: card.rarity || "Unknown",
+      supertype: card.supertype,
+      subtypes: card.subtypes || [],
+      set: {
+        id: card.set?.id,
+        name: card.set?.name,
+        series: card.set?.series,
+        releaseDate: card.set?.releaseDate,
+        images: card.set?.images,
+      },
+      images: card.images,
+      cardmarket: card.cardmarket,
+      tcgplayer: card.tcgplayer,
+    }))
 
-    return NextResponse.json({ sets, seriesGroups })
+    return NextResponse.json({ cards })
   } catch (error) {
-    console.error("Error fetching Pokemon sets:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch sets" },
-      { status: 500 }
-    )
+    console.error("Search error:", error)
+    return NextResponse.json({ error: "Search failed" }, { status: 500 })
   }
 }
