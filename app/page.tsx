@@ -8,19 +8,18 @@ import { Plus } from "lucide-react"
 import { getAllOwnedCounts } from "@/lib/collection"
 
 const MASTER_SETS = [
-  { id: "xy5",         name: "Primal Clash",        series: "XY Series",       totalCards: 164, releaseDate: "Feb 2015" },
-  { id: "base1",       name: "Base Set",             series: "Base Series",     totalCards: 102, releaseDate: "Jan 1999" },
-  { id: "sv8pt5",      name: "Prismatic Evolutions", series: "Scarlet & Violet",totalCards: 258, releaseDate: "Jan 2025" },
-  { id: "sm35",       name: "Hidden Fates",         series: "Sun & Moon",      totalCards: 163, releaseDate: "Aug 2019" },
-  { id: "swsh12pt5",   name: "Crown Zenith",         series: "Sword & Shield",  totalCards: 230, releaseDate: "Jan 2023" },
-  { id: "xy12",        name: "Evolutions",           series: "XY Series",       totalCards: 113, releaseDate: "Nov 2016" },
+  { id: "xy5",       name: "Primal Clash",        series: "XY Series",        totalCards: 164, releaseDate: "Feb 2015" },
+  { id: "base1",     name: "Base Set",             series: "Base Series",      totalCards: 102, releaseDate: "Jan 1999" },
+  { id: "sv8pt5",    name: "Prismatic Evolutions", series: "Scarlet & Violet", totalCards: 258, releaseDate: "Jan 2025" },
+  { id: "sm35",      name: "Hidden Fates",         series: "Sun & Moon",       totalCards: 163, releaseDate: "Aug 2019" },
+  { id: "swsh12pt5", name: "Crown Zenith",         series: "Sword & Shield",   totalCards: 230, releaseDate: "Jan 2023" },
+  { id: "xy12",      name: "Evolutions",           series: "XY Series",        totalCards: 113, releaseDate: "Nov 2016" },
 ]
 
 export default function HomePage() {
   const [ownedCounts, setOwnedCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    // Read real owned counts from localStorage once on mount
     setOwnedCounts(getAllOwnedCounts())
   }, [])
 
@@ -50,7 +49,6 @@ export default function HomePage() {
           </Button>
         </div>
 
-        {/* Stats Overview */}
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border bg-card p-4">
             <p className="text-sm text-muted-foreground">Total Sets</p>
@@ -66,7 +64,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Master Sets Grid */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {setsWithOwned.map((set) => (
             <MasterSetCard key={set.id} {...set} />
