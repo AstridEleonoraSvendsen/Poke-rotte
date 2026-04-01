@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Menu, Search, User, ExternalLink } from "lucide-react"
+import { Menu, Search, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -39,9 +39,9 @@ export function Header() {
               {navItems.map((item) => (
                 <DropdownMenuItem key={item.href} asChild>
                   {item.external ? (
-                    <a 
-                      href={item.href} 
-                      target="_blank" 
+                    <a
+                      href={item.href}
+                      target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-between"
                     >
@@ -58,13 +58,13 @@ export function Header() {
 
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">PC</span>
+              <span className="text-sm font-bold text-primary-foreground">RC</span>
             </div>
-            <span className="text-lg font-bold tracking-tight">PokeCollect</span>
+            <span className="text-lg font-bold tracking-tight">Rat Collectors</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => 
+            {navItems.map((item) =>
               item.external ? (
                 <a
                   key={item.href}
@@ -98,10 +98,6 @@ export function Header() {
           <Button variant="ghost" size="icon">
             <Search className="h-5 w-5" />
             <span className="sr-only">Search</span>
-          </Button>
-          <Button variant="ghost" size="icon">
-            <User className="h-5 w-5" />
-            <span className="sr-only">Account</span>
           </Button>
         </div>
       </div>
