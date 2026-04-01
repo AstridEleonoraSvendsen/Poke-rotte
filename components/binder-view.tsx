@@ -42,7 +42,6 @@ export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggl
         return (
           <div key={sideIndex} className="rounded-lg border bg-card p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Page */}
               <div className="rounded-lg border border-border/50 bg-background/50 p-4">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-sm font-medium text-accent">SIDE {sideIndex * 2 + 1}</span>
@@ -62,7 +61,6 @@ export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggl
                 </div>
               </div>
 
-              {/* Right Page */}
               {rightPage.length > 0 && (
                 <div className="rounded-lg border border-border/50 bg-background/50 p-4">
                   <div className="flex items-center justify-between mb-4">
