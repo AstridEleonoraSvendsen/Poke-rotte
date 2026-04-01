@@ -20,6 +20,7 @@ export function Header() {
   const navItems = [
     { href: "/", label: "Master Sets", external: false },
     { href: "/database", label: "Card Database", external: false },
+    { href: "/dreams", label: "Poke Dreams", external: false },
     { href: "https://www.cardmarket.com/en/Pokemon", label: "Rat Market", external: true },
   ]
 
