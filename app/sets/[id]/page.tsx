@@ -12,8 +12,6 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeft, Search, Download, Trash2, ArrowUpDown, Heart } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
-
-type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+
+type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 
 interface PokemonCard {
   id: string
@@ -414,51 +414,61 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
 
         {/* Cards View */}
         {viewMode === "grid" ? (
-          <div className="grid gap-3 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+          <div className="grid gap-x-3 gap-y-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
             {filteredAndSortedCards.map((card) => (
-              <button
-                key={card.id}
-                onClick={() => toggleOwned(card.id)}
-                className={cn(
-                  "group relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all",
-                  "hover:scale-105 hover:z-10 hover:shadow-xl",
-                  !ownedCards.has(card.id) && "opacity-40 grayscale"
-                )}
-              >
-                <Image
-                  src={card.images.small}
-                  alt={card.name}
-                  fill
-                  className="object-cover"
-                  sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
-                />
-                {card.isReverseHolo && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
-                )}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-[10px] text-white font-medium truncate">{card.name}</p>
-                  <p className="text-[9px] text-white/70">#{card.number}</p>
-                </div>
-                <div className={cn(
-                  "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
-                  ownedCards.has(card.id) ? "bg-primary text-primary-foreground" : "bg-muted/80 text-muted-foreground"
-                )}>
-                  {ownedCards.has(card.id) ? "1/1" : "0/1"}
-                </div>
-                <button
-                  onClick={(e) => toggleWishlist(card.id, e)}
+              <div key={card.id} className="group flex flex-col">
+                {/* Card image — clickable to toggle owned */}
+                <div
+                  onClick={() => toggleOwned(card.id)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && toggleOwned(card.id)}
                   className={cn(
-                    "absolute top-1 left-1 p-1 rounded transition-all",
-                    wishlist.has(card.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    "relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all cursor-pointer",
+                    "hover:scale-105 hover:z-10 hover:shadow-xl",
+                    !ownedCards.has(card.id) && "opacity-40 grayscale"
                   )}
-                  title={wishlist.has(card.id) ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                  <Heart className={cn(
-                    "h-3.5 w-3.5 drop-shadow",
-                    wishlist.has(card.id) ? "fill-pink-500 text-pink-500" : "text-white"
-                  )} />
-                </button>
-              </button>
+                  <Image
+                    src={card.images.small}
+                    alt={card.name}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
+                  />
+                  {card.isReverseHolo && (
+                    <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
+                  )}
+                  <div className={cn(
+                    "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
+                    ownedCards.has(card.id) ? "bg-primary text-primary-foreground" : "bg-muted/80 text-muted-foreground"
+                  )}>
+                    {ownedCards.has(card.id) ? "1/1" : "0/1"}
+                  </div>
+                  <button
+                    onClick={(e) => toggleWishlist(card.id, e)}
+                    className={cn(
+                      "absolute top-1 left-1 p-1 rounded transition-all",
+                      wishlist.has(card.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    )}
+                    title={wishlist.has(card.id) ? "Remove from wishlist" : "Add to wishlist"}
+                  >
+                    <Heart className={cn(
+                      "h-3.5 w-3.5 drop-shadow",
+                      wishlist.has(card.id) ? "fill-pink-500 text-pink-500" : "text-white"
+                    )} />
+                  </button>
+                </div>
+                {/* Info panel beneath card — pokedata style */}
+                <div className="mt-1.5 flex flex-col gap-px">
+                  <p className="text-[10px] font-semibold leading-tight truncate">
+                    {card.isReverseHolo ? card.name.replace(" Reverse Holo", "") : card.name}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">
+                    #{card.number}{card.isReverseHolo ? " · Reverse Holo" : ""}
+                  </p>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
