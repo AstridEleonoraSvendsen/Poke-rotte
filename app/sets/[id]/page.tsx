@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Download, Trash2, ArrowUpDown, Heart } from "lucide-react"
+import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 import {
   DropdownMenu,
@@ -70,6 +70,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [sortBy, setSortBy] = useState<SortOption>("number-asc")
   const [showWishlistOnly, setShowWishlistOnly] = useState(false)
   const [saveIndicator, setSaveIndicator] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   useEffect(() => {
     setOwnedCards(loadOwnedCards(setId))
@@ -234,6 +235,43 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   return (
     <div className="min-h-screen bg-background">
       <Header />
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-destructive" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold">Delete master set?</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  This will permanently remove all your progress for <strong>{set?.name}</strong>. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setConfirmDelete(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-destructive hover:bg-destructive/90 text-white"
+                onClick={() => {
+                  clearAll()
+                  setConfirmDelete(false)
+                }}
+              >
+                Yes, delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="container mx-auto px-4 py-8">
         <Link
