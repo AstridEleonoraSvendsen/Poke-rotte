@@ -11,7 +11,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ cards: [], total: 0, page: 1, pageSize })
   }
 
-  // Map our sort param to TCG API orderBy
   const orderByMap: Record<string, string> = {
     "releaseDate-desc": "-set.releaseDate",
     "releaseDate-asc":  "set.releaseDate",
@@ -20,20 +19,27 @@ export async function GET(request: Request) {
   }
   const orderBy = orderByMap[sort] || "-set.releaseDate"
 
-  // Use wildcard search: name:mew* finds "Mew", "Mew ex", "Mewtwo", etc.
-  // But we only want cards whose name STARTS WITH or IS the query — use name:query*
-  const searchTerm = `name:${query.trim()}*`
+  // IMPORTANT: Build the URL manually so the q param is not double-encoded.
+  // The TCG API needs q=name:mewtwo* NOT q=name%3Amewtwo*
+  const cleanQuery = query.trim().replace(/['"]/g, "")
+  const apiUrl = new URL("https://api.pokemontcg.io/v2/cards")
+  apiUrl.searchParams.set("orderBy", orderBy)
+  apiUrl.searchParams.set("pageSize", String(pageSize))
+  apiUrl.searchParams.set("page", String(page))
+  // Set q manually to avoid encodeURIComponent turning : and * into %3A and %2A
+  const rawUrl = `${apiUrl.toString()}&q=name:${encodeURIComponent(cleanQuery)}*`
 
   try {
-    const url = `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(searchTerm)}&orderBy=${orderBy}&pageSize=${pageSize}&page=${page}`
-
-    const response = await fetch(url, {
+    const response = await fetch(rawUrl, {
       headers: { "Content-Type": "application/json" },
-      next: { revalidate: 300 },
+      // No caching — search must always be fresh
+      cache: "no-store",
     })
 
     if (!response.ok) {
-      return NextResponse.json({ error: "Search failed" }, { status: 500 })
+      const errorText = await response.text()
+      console.error("TCG API error:", response.status, errorText)
+      return NextResponse.json({ error: "Search failed", detail: errorText }, { status: 500 })
     }
 
     const data = await response.json()
@@ -50,13 +56,12 @@ export async function GET(request: Request) {
         name: card.set?.name,
         series: card.set?.series,
         releaseDate: card.set?.releaseDate,
-        images: card.set?.images,
       },
       images: card.images,
-      // Prefer cardmarket (EUR) prices
-      marketPrice: card.cardmarket?.prices?.trendPrice
-        ?? card.cardmarket?.prices?.averageSellPrice
-        ?? null,
+      marketPrice:
+        card.cardmarket?.prices?.trendPrice ??
+        card.cardmarket?.prices?.averageSellPrice ??
+        null,
     }))
 
     return NextResponse.json({
@@ -67,7 +72,7 @@ export async function GET(request: Request) {
       hasMore: (data.totalCount ?? 0) > page * pageSize,
     })
   } catch (error) {
-    console.error("Search error:", error)
+    console.error("Search fetch error:", error)
     return NextResponse.json({ error: "Search failed" }, { status: 500 })
   }
 }
