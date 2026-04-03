@@ -1,42 +1,30 @@
 import { NextResponse } from "next/server"
 
 function apiHeaders(): HeadersInit {
-  const headers: HeadersInit = { "Content-Type": "application/json" }
-  if (process.env.POKEMON_TCG_API_KEY) {
-    headers["X-Api-Key"] = process.env.POKEMON_TCG_API_KEY
-  }
-  return headers
+  const h: HeadersInit = { "Content-Type": "application/json" }
+  if (process.env.POKEMON_TCG_API_KEY) h["X-Api-Key"] = process.env.POKEMON_TCG_API_KEY
+  return h
 }
 
 export async function GET() {
   try {
-    const response = await fetch(
+    const res = await fetch(
       "https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=250",
-      {
-        headers: apiHeaders(),
-        cache: "force-cache",
-      }
+      { headers: apiHeaders(), cache: "no-store" }
     )
-
-    if (!response.ok) {
-      const text = await response.text()
-      console.error("Sets fetch failed:", response.status, text)
+    if (!res.ok) {
       return NextResponse.json({ error: "Failed to fetch sets" }, { status: 500 })
     }
-
-    const data = await response.json()
-    const sets = data.data || []
-
+    const sets = (await res.json()).data || []
     const seriesGroups = sets.reduce((acc: Record<string, any[]>, set: any) => {
-      const series = set.series || "Other"
-      if (!acc[series]) acc[series] = []
-      acc[series].push(set)
+      const s = set.series || "Other"
+      if (!acc[s]) acc[s] = []
+      acc[s].push(set)
       return acc
     }, {})
-
     return NextResponse.json({ sets, seriesGroups })
-  } catch (error) {
-    console.error("Error fetching Pokemon sets:", error)
+  } catch (err) {
+    console.error("Sets list error:", err)
     return NextResponse.json({ error: "Failed to fetch sets" }, { status: 500 })
   }
 }
