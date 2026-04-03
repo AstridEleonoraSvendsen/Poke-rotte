@@ -264,22 +264,24 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
               </div>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setConfirmDelete(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 bg-destructive hover:bg-destructive/90 text-white"
-                onClick={() => {
-                  clearAll()
-                  setConfirmDelete(false)
-                }}
-              >
-                Yes, delete
-              </Button>
+             <Button
+  className="flex-1 bg-destructive hover:bg-destructive/90 text-white"
+  onClick={() => {
+    // 1. Clear the cards
+    clearAll()
+    
+    // 2. Import and call the new remove function
+    import("@/lib/collection").then((mod) => {
+      mod.removeActiveSet(setId)
+      setConfirmDelete(false)
+      
+      // 3. Send the user back to the home page!
+      window.location.href = "/";
+    })
+  }}
+>
+  Yes, delete
+</Button>
             </div>
           </div>
         </div>
