@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle, Download } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 import {
   DropdownMenu,
@@ -84,7 +84,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         if (!response.ok) throw new Error("Failed to fetch set data")
         const data = await response.json()
         setSet(data.set)
-        setCards(data.cards)
+        // Ensure we always have an array, even if the API sends null
+        setCards(data.cards || [])
         setStats(data.stats)
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
@@ -156,44 +157,53 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     "missing": "Cards I Do Not Own",
   }
 
-  const filteredAndSortedCards = cards
+  // FIXED: Wrapped string conversions and added optional chaining so missing data won't crash
+  const filteredAndSortedCards = (cards || [])
     .filter((card) => {
+      if (!card) return false;
+      const safeName = card.name || "";
+      const safeNumber = String(card.number || "");
+      
       const matchesSearch =
-        card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        card.number.includes(searchQuery)
+        safeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        safeNumber.includes(searchQuery)
       const matchesWishlist = showWishlistOnly ? wishlist.has(card.id) : true
       return matchesSearch && matchesWishlist
     })
     .sort((a, b) => {
+      if (!a || !b) return 0;
+      const safeNumA = String(a.number || "");
+      const safeNumB = String(b.number || "");
+      
       switch (sortBy) {
         case "number-asc": {
-          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
-          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
+          const numA = parseInt(safeNumA.replace(/\D/g, "")) || 0
+          const numB = parseInt(safeNumB.replace(/\D/g, "")) || 0
           if (numA !== numB) return numA - numB
           return a.isReverseHolo ? 1 : -1
         }
         case "number-desc": {
-          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
-          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
+          const numA = parseInt(safeNumA.replace(/\D/g, "")) || 0
+          const numB = parseInt(safeNumB.replace(/\D/g, "")) || 0
           if (numA !== numB) return numB - numA
           return a.isReverseHolo ? 1 : -1
         }
         case "alpha":
-          return a.name.localeCompare(b.name)
+          return (a.name || "").localeCompare(b.name || "")
         case "owned": {
           const aOwned = ownedCards.has(a.id) ? 0 : 1
           const bOwned = ownedCards.has(b.id) ? 0 : 1
           if (aOwned !== bOwned) return aOwned - bOwned
-          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
-          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
+          const numA = parseInt(safeNumA.replace(/\D/g, "")) || 0
+          const numB = parseInt(safeNumB.replace(/\D/g, "")) || 0
           return numA - numB
         }
         case "missing": {
           const aMissing = ownedCards.has(a.id) ? 1 : 0
           const bMissing = ownedCards.has(b.id) ? 1 : 0
           if (aMissing !== bMissing) return aMissing - bMissing
-          const numA = parseInt(a.number.replace(/\D/g, "")) || 0
-          const numB = parseInt(b.number.replace(/\D/g, "")) || 0
+          const numA = parseInt(safeNumA.replace(/\D/g, "")) || 0
+          const numB = parseInt(safeNumB.replace(/\D/g, "")) || 0
           return numA - numB
         }
         default:
@@ -288,7 +298,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             <div className="flex items-center gap-4">
               {set.images?.logo && (
                 <div className="relative h-16 w-16 flex-shrink-0">
-                  <Image src={set.images.logo} alt={set.name} fill className="object-contain" />
+                  <Image src={set.images.logo} alt={set.name || "Set Logo"} fill className="object-contain" />
                 </div>
               )}
               <div>
@@ -462,18 +472,26 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   tabIndex={0}
                   onKeyDown={(e) => e.key === "Enter" && toggleOwned(card.id)}
                   className={cn(
-                    "relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all cursor-pointer",
+                    "relative aspect-[2.5/3.5] rounded-lg overflow-hidden transition-all cursor-pointer bg-secondary/20",
                     "hover:scale-105 hover:z-10 hover:shadow-xl",
                     !ownedCards.has(card.id) && "opacity-40 grayscale"
                   )}
                 >
-                  <Image
-                    src={card.images.small}
-                    alt={card.name}
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
-                  />
+                  {/* FIXED: Prevent crash if card is missing an image from the API */}
+                  {card.images?.small ? (
+                    <Image
+                      src={card.images.small}
+                      alt={card.name || "Unknown Card"}
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 640px) 30vw, (max-width: 1024px) 20vw, 12vw"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center p-2 text-center border-2 border-dashed border-muted-foreground/30">
+                      <span className="text-[10px] text-muted-foreground font-medium">No Image</span>
+                    </div>
+                  )}
+                  
                   {card.isReverseHolo && (
                     <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
                   )}
@@ -500,10 +518,11 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 {/* Info panel beneath card — pokedata style */}
                 <div className="mt-1.5 flex flex-col gap-px">
                   <p className="text-[10px] font-semibold leading-tight truncate">
-                    {card.isReverseHolo ? card.name.replace(" Reverse Holo", "") : card.name}
+                    {/* FIXED: Added fallback for card.name to prevent `.replace` crash */}
+                    {card.isReverseHolo ? (card.name || "").replace(" Reverse Holo", "") : (card.name || "Unknown")}
                   </p>
                   <p className="text-[9px] text-muted-foreground">
-                    #{card.number}{card.isReverseHolo ? " · Reverse Holo" : ""}
+                    #{card.number || "??"}{card.isReverseHolo ? " · Reverse Holo" : ""}
                   </p>
                 </div>
               </div>
