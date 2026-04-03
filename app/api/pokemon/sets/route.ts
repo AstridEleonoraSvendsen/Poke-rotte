@@ -1,78 +1,42 @@
 import { NextResponse } from "next/server"
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const query = searchParams.get("q")
-  const sort = searchParams.get("sort") || "releaseDate-desc"
-  const page = parseInt(searchParams.get("page") || "1")
-  const pageSize = 24
-
-  if (!query || query.trim().length < 2) {
-    return NextResponse.json({ cards: [], total: 0, page: 1, pageSize })
+function apiHeaders(): HeadersInit {
+  const headers: HeadersInit = { "Content-Type": "application/json" }
+  if (process.env.POKEMON_TCG_API_KEY) {
+    headers["X-Api-Key"] = process.env.POKEMON_TCG_API_KEY
   }
+  return headers
+}
 
-  const orderByMap: Record<string, string> = {
-    "releaseDate-desc": "-set.releaseDate",
-    "releaseDate-asc":  "set.releaseDate",
-    "price-desc":       "-cardmarket.prices.averageSellPrice",
-    "price-asc":        "cardmarket.prices.averageSellPrice",
-  }
-  const orderBy = orderByMap[sort] || "-set.releaseDate"
-
-  // IMPORTANT: Build the URL manually so the q param is not double-encoded.
-  // The TCG API needs q=name:mewtwo* NOT q=name%3Amewtwo*
-  const cleanQuery = query.trim().replace(/['"]/g, "")
-  const apiUrl = new URL("https://api.pokemontcg.io/v2/cards")
-  apiUrl.searchParams.set("orderBy", orderBy)
-  apiUrl.searchParams.set("pageSize", String(pageSize))
-  apiUrl.searchParams.set("page", String(page))
-  // Set q manually to avoid encodeURIComponent turning : and * into %3A and %2A
-  const rawUrl = `${apiUrl.toString()}&q=name:${encodeURIComponent(cleanQuery)}*`
-
+export async function GET() {
   try {
-    const response = await fetch(rawUrl, {
-      headers: { "Content-Type": "application/json" },
-      // No caching — search must always be fresh
-      cache: "no-store",
-    })
+    const response = await fetch(
+      "https://api.pokemontcg.io/v2/sets?orderBy=-releaseDate&pageSize=250",
+      {
+        headers: apiHeaders(),
+        cache: "force-cache",
+      }
+    )
 
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("TCG API error:", response.status, errorText)
-      return NextResponse.json({ error: "Search failed", detail: errorText }, { status: 500 })
+      const text = await response.text()
+      console.error("Sets fetch failed:", response.status, text)
+      return NextResponse.json({ error: "Failed to fetch sets" }, { status: 500 })
     }
 
     const data = await response.json()
+    const sets = data.data || []
 
-    const cards = (data.data || []).map((card: any) => ({
-      id: card.id,
-      name: card.name,
-      number: card.number,
-      rarity: card.rarity || "Unknown",
-      supertype: card.supertype,
-      subtypes: card.subtypes || [],
-      set: {
-        id: card.set?.id,
-        name: card.set?.name,
-        series: card.set?.series,
-        releaseDate: card.set?.releaseDate,
-      },
-      images: card.images,
-      marketPrice:
-        card.cardmarket?.prices?.trendPrice ??
-        card.cardmarket?.prices?.averageSellPrice ??
-        null,
-    }))
+    const seriesGroups = sets.reduce((acc: Record<string, any[]>, set: any) => {
+      const series = set.series || "Other"
+      if (!acc[series]) acc[series] = []
+      acc[series].push(set)
+      return acc
+    }, {})
 
-    return NextResponse.json({
-      cards,
-      total: data.totalCount ?? cards.length,
-      page,
-      pageSize,
-      hasMore: (data.totalCount ?? 0) > page * pageSize,
-    })
+    return NextResponse.json({ sets, seriesGroups })
   } catch (error) {
-    console.error("Search fetch error:", error)
-    return NextResponse.json({ error: "Search failed" }, { status: 500 })
+    console.error("Error fetching Pokemon sets:", error)
+    return NextResponse.json({ error: "Failed to fetch sets" }, { status: 500 })
   }
 }
