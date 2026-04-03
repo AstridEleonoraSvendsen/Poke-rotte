@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle, Download } from "lucide-react"
+import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 import {
   DropdownMenu,
@@ -84,7 +84,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         if (!response.ok) throw new Error("Failed to fetch set data")
         const data = await response.json()
         setSet(data.set)
-        // Ensure we always have an array, even if the API sends null
         setCards(data.cards || [])
         setStats(data.stats)
       } catch (err) {
@@ -157,7 +156,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     "missing": "Cards I Do Not Own",
   }
 
-  // FIXED: Wrapped string conversions and added optional chaining so missing data won't crash
   const filteredAndSortedCards = (cards || [])
     .filter((card) => {
       if (!card) return false;
@@ -255,9 +253,13 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 <AlertTriangle className="h-5 w-5 text-destructive" />
               </div>
               <div>
-                <h2 className="text-base font-bold">Delete master set?</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  This will permanently remove all your progress for <strong>{set?.name}</strong>. This cannot be undone.
+                {/* FIXED: Update modal text per user request */}
+                <h2 className="text-base font-bold text-destructive">Delete master set?</h2>
+                <p className="text-sm text-muted-foreground mt-1 font-medium">
+                  <strong>Does the rat really want to delete their master set?</strong>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  This will permanently remove all progress for <strong>{set?.name}</strong>. This cannot be undone.
                 </p>
               </div>
             </div>
@@ -311,6 +313,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             </div>
 
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
+              {/* Completion Stats */}
               <div className="text-center">
                 <p className="text-2xl font-bold text-primary">{completionPercent}%</p>
                 <p className="text-xs text-muted-foreground">Complete</p>
@@ -367,10 +370,11 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 >
                   Saved ✓
                 </span>
-                <Button variant="ghost" size="icon" title="Export collection">
-                  <Download className="h-5 w-5" />
-                </Button>
-                <Button variant="ghost" size="icon" title="Clear all owned cards" onClick={clearAll}>
+                
+                {/* FIXED: Download button REMOVED */}
+
+                {/* FIXED: Trash button now calls setConfirmDelete(true) */}
+                <Button variant="ghost" size="icon" title="Delete this master set" onClick={() => setConfirmDelete(true)}>
                   <Trash2 className="h-5 w-5" />
                 </Button>
               </div>
@@ -477,7 +481,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                     !ownedCards.has(card.id) && "opacity-40 grayscale"
                   )}
                 >
-                  {/* FIXED: Prevent crash if card is missing an image from the API */}
+                  {/* Prevent crash if card is missing an image */}
                   {card.images?.small ? (
                     <Image
                       src={card.images.small}
@@ -515,10 +519,10 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                     )} />
                   </button>
                 </div>
-                {/* Info panel beneath card — pokedata style */}
+                {/* Info panel beneath card */}
                 <div className="mt-1.5 flex flex-col gap-px">
                   <p className="text-[10px] font-semibold leading-tight truncate">
-                    {/* FIXED: Added fallback for card.name to prevent `.replace` crash */}
+                    {/* Added fallback for card.name */}
                     {card.isReverseHolo ? (card.name || "").replace(" Reverse Holo", "") : (card.name || "Unknown")}
                   </p>
                   <p className="text-[9px] text-muted-foreground">
