@@ -170,3 +170,47 @@ export function updateDreamsCardQuantity(listId: string, cardId: string, quantit
 export function isCardInDreamsList(listId: string, cardId: string): boolean {
   return getDreamsCards(listId).some((c) => c.id === cardId)
 }
+
+// ─── Active Master Sets ────────────────────────────────────────────────────────
+const ACTIVE_SETS_KEY = "active_master_sets"
+
+export interface ActiveSet {
+  id: string;
+  name: string;
+  series: string;
+  totalCards: number;
+  releaseDate: string;
+}
+
+// Default sets to show the first time a user visits
+const DEFAULT_SETS: ActiveSet[] = [
+  { id: "xy5",       name: "Primal Clash",       series: "XY Series",        totalCards: 164, releaseDate: "Feb 2015" },
+  { id: "base1",     name: "Base Set",           series: "Base Series",      totalCards: 102, releaseDate: "Jan 1999" },
+  { id: "sv8pt5",    name: "Prismatic Evolutions", series: "Scarlet & Violet", totalCards: 258, releaseDate: "Jan 2025" },
+]
+
+export function getActiveSets(): ActiveSet[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(ACTIVE_SETS_KEY)
+    if (!raw) {
+      // Save and return the defaults on first load
+      saveActiveSets(DEFAULT_SETS)
+      return DEFAULT_SETS
+    }
+    return JSON.parse(raw) as ActiveSet[]
+  } catch { 
+    return DEFAULT_SETS 
+  }
+}
+
+export function saveActiveSets(sets: ActiveSet[]): void {
+  if (typeof window === "undefined") return
+  try { localStorage.setItem(ACTIVE_SETS_KEY, JSON.stringify(sets)) } catch {}
+}
+
+export function removeActiveSet(setId: string): void {
+  const currentSets = getActiveSets();
+  const updatedSets = currentSets.filter(set => set.id !== setId);
+  saveActiveSets(updatedSets);
+}
