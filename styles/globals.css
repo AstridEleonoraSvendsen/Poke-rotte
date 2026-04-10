@@ -122,4 +122,21 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Custom Pokeball Cursor */
+
+/* 1. The Default Cursor for the whole website */
+body {
+  cursor: url('/pokeball-normal.png') 16 16, auto !important;
+}
+
+/* 2. The Hover Cursor for anything you can click */
+a, 
+button, 
+[role="button"], 
+input[type="submit"], 
+input[type="button"], 
+select,
+.cursor-pointer {
+  cursor: url('/pokeball-hover.png') 16 16, pointer !important;
+}
 }
