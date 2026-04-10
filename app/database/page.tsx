@@ -1,20 +1,13 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Header } from "@/components/header"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { Search, ChevronRight, X, LayoutGrid, List as ListIcon, ArrowUpDown } from "lucide-react"
+import { Search, ChevronRight, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
 
 interface PokemonSet {
   id: string
@@ -31,7 +24,7 @@ interface SearchCard {
   name: string
   number: string
   rarity: string
-  set: { id: string; name: string; releaseDate?: string }
+  set: { id: string; name: string }
   images: { small: string }
   marketPrice: number | null
 }
@@ -47,23 +40,10 @@ function formatDate(d: string) {
   catch { return d }
 }
 
-// ── Sort Options ──
-type SortOption = "newest" | "oldest" | "price-desc" | "price-asc" | "alpha-asc"
-
-const sortLabels: Record<SortOption, string> = {
-  "newest": "Newest Sets First",
-  "oldest": "Oldest Sets First",
-  "price-desc": "Price: High to Low",
-  "price-asc": "Price: Low to High",
-  "alpha-asc": "A-Z",
-}
-
 export default function DatabasePage() {
   const [sets, setSets] = useState<Record<string, PokemonSet[]>>({})
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<string | null>("Scarlet & Violet")
-  
-  // Search States
   const [query, setQuery] = useState("")
   const [cardResults, setCardResults] = useState<SearchCard[]>([])
   const [setResults, setSetResults] = useState<PokemonSet[]>([])
@@ -72,17 +52,15 @@ export default function DatabasePage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const allSets = useRef<PokemonSet[]>([])
 
-  // New Layout & Filter States
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [sortBy, setSortBy] = useState<SortOption>("newest")
-
   useEffect(() => {
     fetch("/api/pokemon/sets")
       .then(r => r.json())
       .then(data => {
+        // Guard: data.seriesGroups may be undefined if API fails
         const groups = data?.seriesGroups ?? {}
         setSets(groups)
         allSets.current = data?.sets ?? []
+        // Auto-expand first available series
         const first = SERIES_ORDER.find(s => groups[s])
         if (first) setExpanded(first)
       })
@@ -90,7 +68,7 @@ export default function DatabasePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Execute Search
+  // Search across cards and sets when query changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     if (query.trim().length < 2) {
@@ -98,10 +76,10 @@ export default function DatabasePage() {
     }
     debounceRef.current = setTimeout(async () => {
       setSearching(true); setSearched(true)
-      
+      // Search sets locally (already loaded)
       const q = query.toLowerCase()
       setSetResults(allSets.current.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6))
-      
+      // Search cards via API
       try {
         const res = await fetch(`/api/pokemon/search?q=${encodeURIComponent(query.trim())}&sort=releaseDate-desc&page=1`)
         const data = await res.json()
@@ -118,32 +96,6 @@ export default function DatabasePage() {
     return ai - bi
   })
 
-  // ── Apply Sorting to Cards ──
-  const sortedCardResults = useMemo(() => {
-    return [...cardResults].sort((a, b) => {
-      switch (sortBy) {
-        case "newest": {
-          const dateA = a.set?.releaseDate ? new Date(a.set.releaseDate).getTime() : 0
-          const dateB = b.set?.releaseDate ? new Date(b.set.releaseDate).getTime() : 0
-          return dateB - dateA
-        }
-        case "oldest": {
-          const dateA = a.set?.releaseDate ? new Date(a.set.releaseDate).getTime() : 0
-          const dateB = b.set?.releaseDate ? new Date(b.set.releaseDate).getTime() : 0
-          return dateA - dateB
-        }
-        case "price-desc":
-          return (b.marketPrice || 0) - (a.marketPrice || 0)
-        case "price-asc":
-          return (a.marketPrice || 0) - (b.marketPrice || 0)
-        case "alpha-asc":
-          return a.name.localeCompare(b.name)
-        default:
-          return 0
-      }
-    })
-  }, [cardResults, sortBy])
-
   const showSearch = query.trim().length >= 2
 
   return (
@@ -156,7 +108,7 @@ export default function DatabasePage() {
           <p className="mt-1 text-muted-foreground">Browse all Pokémon TCG sets and cards</p>
         </div>
 
-        {/* Search Input */}
+        {/* Search */}
         <div className="relative mb-8 max-w-xl">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -187,7 +139,7 @@ export default function DatabasePage() {
               <>
                 {/* Matching sets */}
                 {setResults.length > 0 && (
-                  <div className="mb-8">
+                  <div className="mb-6">
                     <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Sets</h2>
                     <div className="flex flex-col gap-1">
                       {setResults.map(set => (
@@ -200,7 +152,7 @@ export default function DatabasePage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold truncate">{set.name}</p>
-                            <p className="text-xs text-muted-foreground">{set.series} · {set.total || set.printedTotal} cards</p>
+                            <p className="text-xs text-muted-foreground">{set.series} · {set.total || set.printedTotal} cards + reverse holos</p>
                           </div>
                           <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(set.releaseDate)}</span>
                           <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -213,110 +165,28 @@ export default function DatabasePage() {
                 {/* Matching cards */}
                 {cardResults.length > 0 && (
                   <div>
-                    {/* Toolbar: Title, View Toggles, and Sort Dropdown */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b pb-4">
-                      <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                        Cards — {cardResults.length} found
-                      </h2>
-                      
-                      <div className="flex items-center gap-3">
-                        {/* View Mode Toggle */}
-                        <div className="flex rounded-lg border bg-secondary/50 p-1">
-                          <button
-                            onClick={() => setViewMode("grid")}
-                            className={cn(
-                              "p-1.5 rounded-md transition-colors",
-                              viewMode === "grid" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            )}
-                            title="Grid View"
-                          >
-                            <LayoutGrid className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setViewMode("list")}
-                            className={cn(
-                              "p-1.5 rounded-md transition-colors",
-                              viewMode === "list" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                            )}
-                            title="List View"
-                          >
-                            <ListIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        {/* Sort Dropdown */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="gap-2 min-w-[160px] justify-between text-xs">
-                              {sortLabels[sortBy]}
-                              <ArrowUpDown className="h-3 w-3" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[180px]">
-                            <DropdownMenuItem onClick={() => setSortBy("newest")}>Newest Sets First</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy("oldest")}>Oldest Sets First</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy("price-desc")}>Price: High to Low</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy("price-asc")}>Price: Low to High</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy("alpha-asc")}>Alphabetical A-Z</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                    <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">
+                      Cards — {cardResults.length} found
+                    </h2>
+                    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {cardResults.map(card => (
+                        <Link key={card.id} href={`/database/${card.set.id}`}
+                          className="group flex flex-col hover:opacity-90 transition-opacity">
+                          <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow">
+                            <Image src={card.images.small} alt={card.name} fill
+                              className="object-cover group-hover:scale-105 transition-transform duration-200"
+                              sizes="(max-width: 640px) 45vw, 16vw" />
+                          </div>
+                          <div className="mt-1.5 flex flex-col gap-px">
+                            <p className="text-[11px] font-bold truncate">{card.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{card.set.name} #{card.number}</p>
+                            <p className="text-[11px] font-semibold text-primary">
+                              {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
                     </div>
-
-                    {/* Card Display Area */}
-                    {viewMode === "grid" ? (
-                      /* Grid View Layout */
-                      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                        {sortedCardResults.map(card => (
-                          <Link key={card.id} href={`/database/${card.set.id}`}
-                            className="group flex flex-col hover:opacity-90 transition-opacity">
-                            <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow bg-secondary/20">
-                              {card.images?.small ? (
-                                <Image src={card.images.small} alt={card.name} fill
-                                  className="object-cover group-hover:scale-105 transition-transform duration-200"
-                                  sizes="(max-width: 640px) 45vw, 16vw" />
-                              ) : (
-                                <div className="absolute inset-0 flex items-center justify-center p-2 text-center border-2 border-dashed border-muted-foreground/30">
-                                  <span className="text-[10px] text-muted-foreground font-medium">No Image</span>
-                                </div>
-                              )}
-                            </div>
-                            <div className="mt-1.5 flex flex-col gap-px">
-                              <p className="text-[11px] font-bold truncate">{card.name}</p>
-                              <p className="text-[10px] text-muted-foreground truncate">{card.set.name} #{card.number}</p>
-                              <p className="text-[11px] font-semibold text-primary">
-                                {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
-                              </p>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    ) : (
-                      /* List View Layout */
-                      <div className="flex flex-col gap-2">
-                        {sortedCardResults.map(card => (
-                          <Link key={card.id} href={`/database/${card.set.id}`}
-                            className="flex items-center gap-4 p-3 rounded-xl border bg-card hover:bg-secondary/30 transition-colors group">
-                            <div className="relative h-16 w-12 flex-shrink-0 rounded-sm overflow-hidden bg-secondary/20 shadow-sm">
-                              {card.images?.small && (
-                                <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="48px" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-sm truncate group-hover:text-primary transition-colors">{card.name}</p>
-                              <p className="text-xs text-muted-foreground">{card.set.name} · #{card.number}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-semibold text-sm">
-                                {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground uppercase">{card.rarity}</p>
-                            </div>
-                            <ChevronRight className="h-5 w-5 text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity" />
-                          </Link>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -376,7 +246,7 @@ export default function DatabasePage() {
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium truncate">{set.name}</p>
-                                <p className="text-sm text-muted-foreground">{set.total || set.printedTotal} cards</p>
+                                <p className="text-sm text-muted-foreground">{set.total || set.printedTotal} cards + reverse holos</p>
                               </div>
                               <span className="text-sm text-muted-foreground whitespace-nowrap">{formatDate(set.releaseDate)}</span>
                             </Link>
