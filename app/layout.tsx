@@ -38,14 +38,14 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         
-        {/* --- THE POKEAPI TEST INJECTION --- */}
+        {/* --- BULLETPROOF CURSOR INJECTION --- */}
         <style dangerouslySetInnerHTML={{
           __html: `
             html, body, * { 
-              cursor: url('https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/poke-ball.png') 15 15, auto !important; 
+              cursor: url('/pokeball-normal.png') 16 16, auto !important; 
             }
             a, button, [role="button"], input, select, textarea, .cursor-pointer, a *, button * { 
-              cursor: url('https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/master-ball.png') 15 15, pointer !important; 
+              cursor: url('/pokeball-hover.png') 16 16, pointer !important; 
             }
           `
         }} />
