@@ -43,7 +43,7 @@ const SERIES_ORDER = [
 ]
 
 function formatDate(d: string) {
-  try { return new Date(d).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) }
+  try { return new Date(d).toLocaleDateString("en-US", { month: "short", year: "numeric" }) }
   catch { return d }
 }
 
@@ -200,7 +200,7 @@ export default function DatabasePage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold truncate">{set.name}</p>
-                            <p className="text-xs text-muted-foreground">{set.series} · {set.total || set.printedTotal} cards</p>
+                            <p className="text-xs text-muted-foreground">{set.series} · {set.total || set.printedTotal} Base Cards</p>
                           </div>
                           <span className="text-xs text-muted-foreground whitespace-nowrap">{formatDate(set.releaseDate)}</span>
                           <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -265,28 +265,35 @@ export default function DatabasePage() {
 
                     {/* Card Display Area */}
                     {viewMode === "grid" ? (
-                      /* Grid View Layout */
-                      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      /* Grid View Layout (Updated with Names) */
+                      <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                         {sortedCardResults.map(card => (
                           <Link key={card.id} href={`/database/${card.set.id}`}
-                            className="group flex flex-col hover:opacity-90 transition-opacity">
-                            <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md group-hover:shadow-xl transition-shadow bg-secondary/20">
+                            className="group flex flex-col hover:opacity-90 transition-opacity cursor-pointer"
+                          >
+                            <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-sm border bg-secondary/20 group-hover:shadow-xl transition-all">
                               {card.images?.small ? (
-                                <Image src={card.images.small} alt={card.name} fill
-                                  className="object-cover group-hover:scale-105 transition-transform duration-200"
-                                  sizes="(max-width: 640px) 45vw, 16vw" />
+                                <Image
+                                  src={card.images.small}
+                                  alt={card.name}
+                                  fill
+                                  className="object-cover group-hover:scale-105 transition-transform duration-300"
+                                  sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 16vw"
+                                />
                               ) : (
                                 <div className="absolute inset-0 flex items-center justify-center p-2 text-center border-2 border-dashed border-muted-foreground/30">
                                   <span className="text-[10px] text-muted-foreground font-medium">No Image</span>
                                 </div>
                               )}
                             </div>
-                            <div className="mt-1.5 flex flex-col gap-px">
-                              <p className="text-[11px] font-bold truncate">{card.name}</p>
-                              <p className="text-[10px] text-muted-foreground truncate">{card.set.name} #{card.number}</p>
-                              <p className="text-[11px] font-semibold text-primary">
-                                {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
-                              </p>
+                            <div className="mt-2 flex flex-col gap-0.5 px-1">
+                              <p className="text-[12px] font-bold truncate">{card.name}</p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-[11px] text-muted-foreground truncate">{card.set.name} · #{card.number}</p>
+                                <p className="text-[11px] font-semibold text-primary">
+                                  {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                                </p>
+                              </div>
                             </div>
                           </Link>
                         ))}
@@ -297,7 +304,7 @@ export default function DatabasePage() {
                         {sortedCardResults.map(card => (
                           <Link key={card.id} href={`/database/${card.set.id}`}
                             className="flex items-center gap-4 p-3 rounded-xl border bg-card hover:bg-secondary/30 transition-colors group">
-                            <div className="relative h-16 w-12 flex-shrink-0 rounded-sm overflow-hidden bg-secondary/20 shadow-sm">
+                            <div className="relative h-16 w-12 flex-shrink-0 rounded-sm overflow-hidden bg-secondary/20 shadow-sm border">
                               {card.images?.small && (
                                 <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="48px" />
                               )}
@@ -376,7 +383,7 @@ export default function DatabasePage() {
                               )}
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium truncate">{set.name}</p>
-                                <p className="text-sm text-muted-foreground">{set.total || set.printedTotal} cards</p>
+                                <p className="text-sm text-muted-foreground">{set.total || set.printedTotal} Base Cards</p>
                               </div>
                               <span className="text-sm text-muted-foreground whitespace-nowrap">{formatDate(set.releaseDate)}</span>
                             </Link>
