@@ -1,8 +1,9 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 
-// For now, we'll use a hardcoded user ID until we set up real authentication.
-// This allows testing the database connection.
+// THIS IS THE MAGIC LINE: It forces Vercel to never cache this route
+export const dynamic = 'force-dynamic';
+
 const TEMP_USER_ID = "temp-user-123";
 
 export async function GET() {
@@ -10,7 +11,6 @@ export async function GET() {
     const { rows } = await sql`
       SELECT set_id FROM master_sets WHERE user_id = ${TEMP_USER_ID};
     `;
-    // Extract just the set_ids into an array
     const setIds = rows.map(row => row.set_id);
     return NextResponse.json({ masterSets: setIds }, { status: 200 });
   } catch (error) {
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Set ID is required" }, { status: 400 });
     }
 
-    // Check if it already exists to avoid duplicates
     const check = await sql`
       SELECT * FROM master_sets WHERE user_id = ${TEMP_USER_ID} AND set_id = ${setId};
     `;
