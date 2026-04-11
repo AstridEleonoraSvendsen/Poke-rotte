@@ -7,7 +7,7 @@ import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Plus, Grid3X3, List } from "lucide-react"
+import { ArrowLeft, Search, Plus, Grid3X3, List, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface PokemonCard {
@@ -60,15 +60,29 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
+  // --- NEW DATABASE STATES ---
+  const [isMasterSet, setIsMasterSet] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
   useEffect(() => {
     async function fetchData() {
       try {
+        // 1. Fetch the Set Data
         const response = await fetch(`/api/pokemon/sets/${resolvedParams.id}`)
         if (!response.ok) throw new Error("Failed to fetch set data")
         const data = await response.json()
         setSet(data.set)
         setCards(data.cards)
         setStats(data.stats)
+
+        // 2. Check if it's already in the user's Master Sets in the Database
+        const masterRes = await fetch('/api/master-sets')
+        if (masterRes.ok) {
+          const masterData = await masterRes.json()
+          if (masterData.masterSets?.includes(resolvedParams.id)) {
+            setIsMasterSet(true)
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
       } finally {
@@ -77,6 +91,30 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
     }
     fetchData()
   }, [resolvedParams.id])
+
+  // --- NEW SAVE FUNCTION ---
+  const handleAddToMasterSet = async () => {
+    if (isMasterSet) return
+    setIsSaving(true)
+    
+    try {
+      const res = await fetch('/api/master-sets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setId: resolvedParams.id })
+      })
+
+      if (res.ok) {
+        setIsMasterSet(true)
+      } else {
+        console.error("Failed to add to master sets")
+      }
+    } catch (err) {
+      console.error("Error saving master set:", err)
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   const filteredCards = cards.filter((card) =>
     card.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -142,7 +180,6 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
               <p className="text-sm font-medium text-primary mb-1 uppercase tracking-wider">{set.series}</p>
               <h1 className="text-3xl font-bold tracking-tight mb-4">{set.name}</h1>
               
-              {/* PokeData Style Stats Block */}
               <div className="flex flex-wrap gap-6 text-sm">
                 <div className="flex flex-col gap-1">
                   <span className="text-muted-foreground text-xs uppercase tracking-wider">Release Date</span>
@@ -163,9 +200,22 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
               </div>
             </div>
           </div>
-          <Button className="gap-2 w-fit shrink-0 mt-4 sm:mt-0">
-            <Plus className="h-4 w-4" />
-            Add to Master Sets
+          
+          {/* --- UPDATED BUTTON --- */}
+          <Button 
+            className="gap-2 w-fit shrink-0 mt-4 sm:mt-0 transition-all duration-300"
+            onClick={handleAddToMasterSet}
+            disabled={isSaving || isMasterSet}
+            variant={isMasterSet ? "secondary" : "default"}
+          >
+            {isSaving ? (
+              <Spinner className="h-4 w-4" />
+            ) : isMasterSet ? (
+              <Check className="h-4 w-4 text-green-500" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            {isSaving ? "Saving..." : isMasterSet ? "In Master Sets" : "Add to Master Sets"}
           </Button>
         </div>
 
@@ -232,48 +282,25 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
               <table className="w-full">
                 <thead>
                   <tr className="border-b bg-secondary/50">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Card
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      #
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Name
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
-                      Rarity
-                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Card</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">#</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Name</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Rarity</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCards.map((card) => (
-                    <tr
-                      key={card.id}
-                      className="border-b last:border-0 hover:bg-secondary/30 transition-colors"
-                    >
+                    <tr key={card.id} className="border-b last:border-0 hover:bg-secondary/30 transition-colors">
                       <td className="px-4 py-2 w-16">
                         <div className="relative h-16 w-11 rounded border bg-secondary/20 overflow-hidden shadow-sm">
-                          <Image
-                            src={card.images.small}
-                            alt={card.name}
-                            fill
-                            className="object-cover"
-                            sizes="44px"
-                          />
+                          <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="44px" />
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">
-                        {card.number}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="font-bold">{card.name}</span>
-                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground font-medium">{card.number}</td>
+                      <td className="px-4 py-3"><span className="font-bold">{card.name}</span></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span
-                            className={cn("h-2.5 w-2.5 rounded-full shadow-sm border border-black/10", getRarityColor(card.rarity))}
-                          />
+                          <span className={cn("h-2.5 w-2.5 rounded-full shadow-sm border border-black/10", getRarityColor(card.rarity))} />
                           <span className="text-sm font-medium text-muted-foreground">{card.rarity || "Unknown"}</span>
                         </div>
                       </td>
