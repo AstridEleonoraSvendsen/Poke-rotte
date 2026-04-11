@@ -76,7 +76,7 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
         setStats(data.stats)
 
         // 2. Check if it's already in the user's Master Sets in the Database
-        const masterRes = await fetch('/api/master-sets')
+        const masterRes = await fetch('/api/master-sets', { cache: 'no-store' })
         if (masterRes.ok) {
           const masterData = await masterRes.json()
           if (masterData.masterSets?.includes(resolvedParams.id)) {
