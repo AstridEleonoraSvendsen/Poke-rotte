@@ -6,11 +6,13 @@ import { Header } from "@/components/header"
 import { MasterSetCard } from "@/components/master-set-card"
 import { Button } from "@/components/ui/button"
 import { Plus, Search, X } from "lucide-react"
-import { getAllOwnedCounts, getActiveSets, saveActiveSets, type ActiveSet } from "@/lib/collection"
+import { getAllOwnedCounts, type ActiveSet } from "@/lib/collection"
+import { toast } from "sonner"
 
 export default function HomePage() {
   const [ownedCounts, setOwnedCounts] = useState<Record<string, number>>({})
   const [activeSets, setActiveSets] = useState<ActiveSet[]>([])
+  const [isLoadingSets, setIsLoadingSets] = useState(true)
   
   // States for the "Add New Set" popup
   const [isAddingSet, setIsAddingSet] = useState(false)
@@ -18,10 +20,54 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<ActiveSet[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
-  // Load the sets and card counts when the page opens
+  // Load the sets from the CLOUD Database when the page opens
   useEffect(() => {
     setOwnedCounts(getAllOwnedCounts())
-    setActiveSets(getActiveSets())
+
+    async function loadCloudSets() {
+      try {
+        // 1. Get the IDs you own from the Postgres Database
+        const cloudRes = await fetch('/api/master-sets', { cache: 'no-store' })
+        const cloudData = await cloudRes.json()
+        const ownedIds: string[] = cloudData.masterSets || []
+
+        if (ownedIds.length === 0) {
+          setActiveSets([])
+          setIsLoadingSets(false)
+          return
+        }
+
+        // 2. Fetch the global catalog to get the names and logos for those IDs
+        const catalogRes = await fetch('/api/pokemon/sets')
+        const catalogData = await catalogRes.json()
+        const allSets = catalogData.sets || []
+
+        // 3. Match them up
+        const mappedSets: ActiveSet[] = ownedIds.map(id => {
+          const found = allSets.find((s: any) => s.id === id)
+          if (found) {
+            return {
+              id: found.id,
+              name: found.name,
+              series: found.series,
+              totalCards: found.printedTotal || found.total,
+              releaseDate: found.releaseDate,
+              logoUrl: found.images?.logo
+            }
+          }
+          return null
+        }).filter(Boolean) as ActiveSet[]
+
+        setActiveSets(mappedSets)
+      } catch (err) {
+        console.error("Failed to load cloud sets", err)
+        toast.error("Failed to load your Master Sets.")
+      } finally {
+        setIsLoadingSets(false)
+      }
+    }
+
+    loadCloudSets()
   }, [])
 
   // The Search Function for the API
@@ -31,41 +77,52 @@ export default function HomePage() {
     
     setIsSearching(true);
     try {
-      // Call the Pokemon TCG API
       const res = await fetch(`https://api.pokemontcg.io/v2/sets?q=name:"*${searchQuery}*"&orderBy=-releaseDate`);
       const data = await res.json();
       
-      // Format the results to match our ActiveSet type
       const formattedResults = data.data.map((apiSet: any) => ({
         id: apiSet.id,
         name: apiSet.name,
         series: apiSet.series,
         totalCards: apiSet.printedTotal,
-        releaseDate: apiSet.releaseDate
+        releaseDate: apiSet.releaseDate,
+        logoUrl: apiSet.images?.logo
       }));
       
       setSearchResults(formattedResults);
     } catch (error) {
       console.error("Failed to search sets", error);
+      toast.error("Search failed. Please try again.")
     } finally {
       setIsSearching(false);
     }
   }
 
-  // Add the chosen set to the dashboard
-  const handleAddSet = (newSet: ActiveSet) => {
-    // Check if it's already on the dashboard
+  // Add the chosen set to the dashboard AND save to Postgres Cloud
+  const handleAddSet = async (newSet: ActiveSet) => {
     if (activeSets.some(s => s.id === newSet.id)) {
-      alert("This set is already on your dashboard!");
+      toast.info("This set is already on your dashboard!");
       return;
     }
     
-    const updatedSets = [...activeSets, newSet];
-    setActiveSets(updatedSets);
-    saveActiveSets(updatedSets);
+    // Update UI instantly
+    setActiveSets(prev => [...prev, newSet]);
     setIsAddingSet(false);
     setSearchQuery("");
     setSearchResults([]);
+    toast.success(`${newSet.name} added to Master Sets!`);
+
+    // Save to Postgres
+    try {
+      await fetch('/api/master-sets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setId: newSet.id })
+      })
+    } catch (err) {
+      console.error("Failed to save to cloud", err)
+      toast.error("Warning: Failed to save to cloud.")
+    }
   }
 
   // Calculate stats for the dashboard
@@ -142,7 +199,6 @@ export default function HomePage() {
               Track and complete your Pokemon card collections
             </p>
           </div>
-          {/* FIXED: Button now opens the search modal */}
           <Button className="gap-2 w-fit" onClick={() => setIsAddingSet(true)}>
             <Plus className="h-4 w-4" />
             New Master Set
@@ -187,7 +243,14 @@ export default function HomePage() {
           {setsWithOwned.map((set) => (
             <MasterSetCard key={set.id} {...set} />
           ))}
-          {setsWithOwned.length === 0 && (
+          
+          {isLoadingSets && (
+            <div className="col-span-full py-20 text-center text-muted-foreground">
+              Loading your sets from the cloud...
+            </div>
+          )}
+
+          {!isLoadingSets && setsWithOwned.length === 0 && (
              <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl border-muted-foreground/20">
                <p className="text-muted-foreground font-medium mb-4">You have no master sets on your dashboard.</p>
                <Button onClick={() => setIsAddingSet(true)}>Add your first set</Button>
