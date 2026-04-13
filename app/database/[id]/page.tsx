@@ -3,12 +3,14 @@
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { ArrowLeft, Search, Plus, Grid3X3, List, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner" // Ensure sonner is installed
 
 interface PokemonCard {
   id: string
@@ -52,6 +54,7 @@ function getRarityColor(rarity: string) {
 
 export default function DatabaseSetPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
+  const router = useRouter()
   const [set, setSet] = useState<PokemonSet | null>(null)
   const [cards, setCards] = useState<PokemonCard[]>([])
   const [stats, setStats] = useState<SetStats | null>(null)
@@ -60,14 +63,12 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
   const [searchQuery, setSearchQuery] = useState("")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
 
-  // --- NEW DATABASE STATES ---
   const [isMasterSet, setIsMasterSet] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
       try {
-        // 1. Fetch the Set Data
         const response = await fetch(`/api/pokemon/sets/${resolvedParams.id}`)
         if (!response.ok) throw new Error("Failed to fetch set data")
         const data = await response.json()
@@ -75,7 +76,6 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
         setCards(data.cards)
         setStats(data.stats)
 
-        // 2. Check if it's already in the user's Master Sets in the Database
         const masterRes = await fetch('/api/master-sets', { cache: 'no-store' })
         if (masterRes.ok) {
           const masterData = await masterRes.json()
@@ -92,11 +92,14 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
     fetchData()
   }, [resolvedParams.id])
 
-  // --- NEW SAVE FUNCTION ---
   const handleAddToMasterSet = async () => {
-    if (isMasterSet) return
-    setIsSaving(true)
+    if (isMasterSet) {
+        // If already a master set, navigate to the collection view
+        router.push(`/sets/${resolvedParams.id}`);
+        return;
+    }
     
+    setIsSaving(true)
     try {
       const res = await fetch('/api/master-sets', {
         method: 'POST',
@@ -106,11 +109,15 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
 
       if (res.ok) {
         setIsMasterSet(true)
+        toast.success(`${set?.name || "Set"} added to Master Sets!`)
+        // Optionally redirect immediately:
+        // router.push(`/sets/${resolvedParams.id}`)
       } else {
-        console.error("Failed to add to master sets")
+        toast.error("Failed to add to master sets")
       }
     } catch (err) {
       console.error("Error saving master set:", err)
+      toast.error("An error occurred while saving.")
     } finally {
       setIsSaving(false)
     }
@@ -154,7 +161,6 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {/* Back Link */}
         <Link
           href="/database"
           className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
@@ -163,17 +169,11 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
           Back to Database
         </Link>
 
-        {/* Set Header */}
         <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between border-b pb-8">
           <div className="flex items-start gap-4">
             {set.images?.logo && (
               <div className="relative h-20 w-20 flex-shrink-0 bg-secondary/30 rounded-xl p-2 border">
-                <Image
-                  src={set.images.logo}
-                  alt={set.name}
-                  fill
-                  className="object-contain p-2"
-                />
+                <Image src={set.images.logo} alt={set.name} fill className="object-contain p-2" />
               </div>
             )}
             <div>
@@ -201,11 +201,10 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           
-          {/* --- UPDATED BUTTON --- */}
           <Button 
             className="gap-2 w-fit shrink-0 mt-4 sm:mt-0 transition-all duration-300"
             onClick={handleAddToMasterSet}
-            disabled={isSaving || isMasterSet}
+            disabled={isSaving}
             variant={isMasterSet ? "secondary" : "default"}
           >
             {isSaving ? (
@@ -215,11 +214,10 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
             ) : (
               <Plus className="h-4 w-4" />
             )}
-            {isSaving ? "Saving..." : isMasterSet ? "In Master Sets" : "Add to Master Sets"}
+            {isSaving ? "Saving..." : isMasterSet ? "View Collection" : "Add to Master Sets"}
           </Button>
         </div>
 
-        {/* Toolbar */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -252,22 +250,12 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        {/* Cards View */}
         {viewMode === "grid" ? (
           <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {filteredCards.map((card) => (
-              <div
-                key={card.id}
-                className="group flex flex-col hover:opacity-90 transition-opacity cursor-pointer"
-              >
+              <div key={card.id} className="group flex flex-col hover:opacity-90 transition-opacity cursor-pointer">
                 <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-sm border bg-secondary/20 group-hover:shadow-xl transition-all">
-                  <Image
-                    src={card.images.small}
-                    alt={card.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                    sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 16vw"
-                  />
+                  <Image src={card.images.small} alt={card.name} fill className="object-cover group-hover:scale-105 transition-transform duration-300" sizes="(max-width: 640px) 45vw, (max-width: 1024px) 25vw, 16vw" />
                 </div>
                 <div className="mt-2 flex flex-col gap-0.5 px-1">
                   <p className="text-[12px] font-bold truncate">{card.name}</p>
