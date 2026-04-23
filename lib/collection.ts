@@ -173,6 +173,8 @@ export function isCardInDreamsList(listId: string, cardId: string): boolean {
 
 // ─── Active Master Sets ────────────────────────────────────────────────────────
 const ACTIVE_SETS_KEY = "active_master_sets"
+// Added a flag to track if we've ever booted up before
+const HAS_INITIALIZED_KEY = "has_initialized_defaults"
 
 export interface ActiveSet {
   id: string;
@@ -182,7 +184,6 @@ export interface ActiveSet {
   releaseDate: string;
 }
 
-// Default sets to show the first time a user visits
 const DEFAULT_SETS: ActiveSet[] = [
   { id: "xy5",       name: "Primal Clash",       series: "XY Series",        totalCards: 164, releaseDate: "Feb 2015" },
   { id: "base1",     name: "Base Set",           series: "Base Series",      totalCards: 102, releaseDate: "Jan 1999" },
@@ -192,14 +193,21 @@ export function getActiveSets(): ActiveSet[] {
   if (typeof window === "undefined") return []
   try {
     const raw = localStorage.getItem(ACTIVE_SETS_KEY)
+    const hasInitialized = localStorage.getItem(HAS_INITIALIZED_KEY)
+
     if (!raw) {
-      // Save and return the defaults on first load
-      saveActiveSets(DEFAULT_SETS)
-      return DEFAULT_SETS
+      // ONLY load defaults if this is the very first time the app has ever opened on this device
+      if (!hasInitialized) {
+        saveActiveSets(DEFAULT_SETS)
+        localStorage.setItem(HAS_INITIALIZED_KEY, "true") // Mark that we've done this
+        return DEFAULT_SETS
+      }
+      // If we HAVE initialized before, it means the user deleted everything. Return empty array!
+      return []
     }
     return JSON.parse(raw) as ActiveSet[]
   } catch { 
-    return DEFAULT_SETS 
+    return [] 
   }
 }
 
