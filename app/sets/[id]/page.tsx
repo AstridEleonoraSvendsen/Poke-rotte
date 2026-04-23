@@ -230,14 +230,14 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const completionPercent =
     cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
 
-  if (loading) {
+ if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-4">
             <Spinner className="h-8 w-8" />
-            <p className="text-muted-foreground">Loading set data...</p>
+            <p className="text-muted-foreground">Loading rat sets...</p>
           </div>
         </div>
       </div>
