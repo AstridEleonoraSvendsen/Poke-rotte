@@ -244,9 +244,9 @@ export default function HomePage() {
             <MasterSetCard key={set.id} {...set} />
           ))}
           
-          {isLoadingSets && (
+        {isLoadingSets && (
             <div className="col-span-full py-20 text-center text-muted-foreground">
-              Loading your sets from the cloud...
+              Loading rat data from the shadows...
             </div>
           )}
 
