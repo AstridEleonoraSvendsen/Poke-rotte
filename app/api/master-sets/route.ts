@@ -45,3 +45,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to add to master sets" }, { status: 500 });
   }
 }
+
+// --- NEW DELETE FUNCTION ---
+// This allows the cloud database to actually erase the set and its cards
+export async function DELETE(request: Request) {
+  try {
+    const { setId } = await request.json();
+
+    if (!setId) {
+      return NextResponse.json({ error: "Set ID is required" }, { status: 400 });
+    }
+
+    // 1. Delete the set folder from master_sets
+    await sql`
+      DELETE FROM master_sets WHERE user_id = ${TEMP_USER_ID} AND set_id = ${setId};
+    `;
+
+    // 2. Delete all the individual cards the user checked off for that set
+    await sql`
+      DELETE FROM owned_cards WHERE user_id = ${TEMP_USER_ID} AND set_id = ${setId};
+    `;
+
+    return NextResponse.json({ message: "Successfully deleted from cloud" }, { status: 200 });
+  } catch (error) {
+    console.error("Error deleting master set:", error);
+    return NextResponse.json({ error: "Failed to delete from master sets" }, { status: 500 });
+  }
+}
