@@ -338,11 +338,11 @@ export default function DatabasePage() {
         {/* ── SET BROWSER (shown when not searching) ── */}
         {!showSearch && (
           <>
-            {loading && (
+           {loading && (
               <div className="flex items-center justify-center py-16">
                 <div className="flex flex-col items-center gap-4">
                   <Spinner className="h-8 w-8" />
-                  <p className="text-muted-foreground text-sm">Loading sets...</p>
+                  <p className="text-muted-foreground text-sm">Loading rat sets...</p>
                 </div>
               </div>
             )}
