@@ -338,4 +338,154 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
         <div className="mb-10 rounded-xl border bg-card p-5">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Find a card to add</h2>
           <div className="flex gap-2 mb-4 flex-wrap">
-            <div className="relative flex-1 min-w-
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by Pokémon name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="pl-11 h-11 bg-background focus:outline-ring"
+              />
+              {searchQuery && (
+                <button onClick={() => { setSearchQuery(""); setSearchResults([]); setHasSearched(false) }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            <div ref={sortRef} className="relative">
+              <button onClick={() => setSortOpen(v => !v)}
+                className="flex items-center gap-2 h-11 px-4 rounded-lg border bg-background text-sm font-medium hover:bg-secondary/50 transition-colors whitespace-nowrap">
+                <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+                {SORT_LABELS[searchSort]}
+                <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", sortOpen && "rotate-180")} />
+              </button>
+              {sortOpen && (
+                <div className="absolute right-0 top-full mt-1 z-50 w-52 rounded-xl border bg-card shadow-xl overflow-hidden">
+                  {(Object.entries(SORT_LABELS) as [SortOption, string][]).map(([key, label]) => (
+                    <button key={key} onClick={() => { setSearchSort(key); setSortOpen(false) }}
+                      className={cn("w-full text-left px-4 py-3 text-sm hover:bg-secondary/50 transition-colors",
+                        searchSort === key ? "text-primary font-semibold bg-primary/5" : "text-foreground")}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {searchLoading && searchResults.length === 0 && (
+            <div className="flex items-center justify-center py-12">
+              <Spinner className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+
+          {searchResults.length > 0 && (
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {searchResults.map(card => {
+                const inList = isInList(card.id)
+                const justAdded = addedFeedback === card.id
+                return (
+                  <div key={card.id} className="group flex flex-col">
+                    <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
+                      <Image src={card.images.small} alt={card.name} fill
+                        className="object-cover transition-transform duration-200 group-hover:scale-105"
+                        sizes="(max-width: 640px) 45vw, 16vw" />
+                      <button
+                        onClick={() => !inList && !justAdded && handleAddCard(card)}
+                        className={cn(
+                          "absolute top-2 right-2 h-8 w-8 rounded-full flex items-center justify-center shadow-lg transition-all",
+                          inList || justAdded
+                            ? "bg-primary text-primary-foreground scale-110"
+                            : "bg-background/90 text-foreground hover:bg-primary hover:text-primary-foreground hover:scale-110"
+                        )}>
+                        {inList || justAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <div className="mt-2 flex flex-col gap-0.5">
+                      <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{card.set.name}</p>
+                      <p className="text-xs font-semibold text-primary mt-1">
+                        {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* WISHLIST CARDS */}
+        {cards.length > 0 ? (
+          <>
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between mb-5">
+              <h2 className="text-lg font-bold">Cards in this list</h2>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input placeholder="Filter..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="pl-8 h-8 w-40 text-sm bg-card focus:outline-ring" />
+                </div>
+                <span className="text-sm text-muted-foreground">Sort:</span>
+                {(["added", "name", "set", "rarity"] as WishlistSort[]).map(mode => (
+                  <button key={mode} onClick={() => setWishlistSort(mode)}
+                    className={cn("px-3 py-1 text-xs font-medium rounded-md transition-colors capitalize",
+                      wishlistSort === mode ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:text-foreground")}>
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              {sortedWishlistCards.map(card => (
+                <div key={card.id} className="group flex flex-col">
+                  <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
+                    <Image src={card.imageSmall} alt={card.name} fill
+                      className="object-cover transition-transform duration-200 group-hover:scale-105"
+                      sizes="(max-width: 640px) 45vw, 16vw" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button onClick={() => handleRemove(card.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-white rounded-lg text-xs font-medium">
+                        <X className="h-3 w-3" /> Remove
+                      </button>
+                    </div>
+                    {card.quantity > 1 && (
+                      <div className="absolute top-1.5 right-1.5 bg-primary text-primary-foreground text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center shadow">
+                        {card.quantity}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-col gap-0.5">
+                    <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{card.setName}</p>
+                    <p className="text-xs font-semibold text-primary mt-1">
+                      {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button onClick={() => handleQuantity(card.id, -1)}
+                      className="h-6 w-6 rounded-md flex items-center justify-center bg-secondary hover:bg-secondary/70 transition-colors">
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="text-xs font-bold w-5 text-center">{card.quantity}</span>
+                    <button onClick={() => handleQuantity(card.id, 1)}
+                      className="h-6 w-6 rounded-md flex items-center justify-center bg-secondary hover:bg-secondary/70 transition-colors">
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed rounded-2xl border-muted-foreground/10">
+            <Heart className="h-10 w-10 text-muted-foreground/30 mb-3" />
+            <h2 className="text-lg font-semibold mb-1">Your wishlist is empty</h2>
+            <p className="text-sm text-muted-foreground max-w-xs">Search for a card above and click the <strong>+</strong> button to add it.</p>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
