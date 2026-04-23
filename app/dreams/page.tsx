@@ -6,11 +6,14 @@ import Image from "next/image"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import {
   getDreamsLists,
   getDreamsCards,
   createDreamsList,
   deleteDreamsList,
+  saveDreamsLists,
+  saveDreamsCards,
   type DreamsList,
   type DreamsCard,
 } from "@/lib/collection"
@@ -23,8 +26,11 @@ export default function DreamsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
+  const [isSyncing, setIsSyncing] = useState(true) // To show a tiny background sync indicator
 
+  // --- OPTIMISTIC CLOUD SYNC ---
   useEffect(() => {
+    // 1. INSTANT LOAD: Grab data from local storage immediately
     const loaded = getDreamsLists()
     setLists(loaded)
     const counts: Record<string, { count: number; previews: DreamsCard[] }> = {}
@@ -33,23 +39,99 @@ export default function DreamsPage() {
       counts[list.id] = { count: cards.reduce((a, c) => a + c.quantity, 0), previews: cards.slice(0, 5) }
     })
     setCardCounts(counts)
+
+    // 2. BACKGROUND SYNC: Fetch the cloud truth
+    async function syncWithCloud() {
+      try {
+        const res = await fetch('/api/dreams-lists', { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.lists) {
+            const cloudLists: DreamsList[] = data.lists
+
+            // If local storage is empty but cloud has lists (e.g. logging in on iPhone), save them locally!
+            setLists(cloudLists)
+            saveDreamsLists(cloudLists)
+
+            // Now, we need to fetch the card counts for each list from the cloud
+            const cloudCounts: Record<string, { count: number; previews: DreamsCard[] }> = {}
+            
+            // Promise.all lets us fetch the cards for all lists at the exact same time
+            await Promise.all(cloudLists.map(async (list) => {
+              const cardRes = await fetch(`/api/dreams-cards?listId=${list.id}`, { cache: 'no-store' })
+              if (cardRes.ok) {
+                const cardData = await cardRes.json()
+                const cards: DreamsCard[] = cardData.cards || []
+                
+                // Save these cards to local storage so the individual page loads instantly later!
+                saveDreamsCards(list.id, cards)
+                
+                cloudCounts[list.id] = { 
+                  count: cards.reduce((a, c) => a + c.quantity, 0), 
+                  previews: cards.slice(0, 5) 
+                }
+              }
+            }))
+            
+            setCardCounts(cloudCounts)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync dreams lists with cloud:", err)
+      } finally {
+        setIsSyncing(false)
+      }
+    }
+
+    syncWithCloud()
   }, [])
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!newName.trim()) return
+    
+    // 1. Create locally for instant UI response
     const created = createDreamsList(newName, newDesc)
-    setLists((prev) => [...prev, created])
+    setLists((prev) => [created, ...prev]) // Add to top of list
     setCardCounts((prev) => ({ ...prev, [created.id]: { count: 0, previews: [] } }))
+    
     setNewName("")
     setNewDesc("")
     setShowCreate(false)
+
+    // 2. Secretly save to the Vercel Cloud Database
+    try {
+      await fetch('/api/dreams-lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: created.id, 
+          name: created.name, 
+          description: created.description 
+        })
+      })
+    } catch (err) {
+      console.error("Failed to save wishlist to cloud:", err)
+    }
   }
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.preventDefault()
     if (!confirm("Delete this wishlist? This cannot be undone.")) return
+    
+    // 1. Delete locally for instant UI update
     deleteDreamsList(id)
     setLists((prev) => prev.filter((l) => l.id !== id))
+    
+    // 2. Delete from Cloud Database
+    try {
+      await fetch('/api/dreams-lists', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id })
+      })
+    } catch (err) {
+      console.error("Failed to delete wishlist from cloud:", err)
+    }
   }
 
   const totalCards = Object.values(cardCounts).reduce((a, v) => a + v.count, 0)
@@ -66,6 +148,7 @@ export default function DreamsPage() {
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="h-5 w-5 text-primary" />
               <span className="text-xs font-semibold tracking-widest uppercase text-primary">Poke Dreams</span>
+              {isSyncing && <Spinner className="h-3 w-3 text-muted-foreground ml-2" />}
             </div>
             <h1 className="text-4xl font-bold tracking-tight">My Wishlists</h1>
             <p className="mt-2 text-muted-foreground">
@@ -106,6 +189,7 @@ export default function DreamsPage() {
                   placeholder="What are you chasing?"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
               </div>
               <div className="flex gap-2 pt-1">
@@ -120,7 +204,7 @@ export default function DreamsPage() {
         )}
 
         {/* Empty state */}
-        {lists.length === 0 && !showCreate && (
+        {lists.length === 0 && !showCreate && !isSyncing && (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <Heart className="h-10 w-10 text-primary" />
@@ -172,7 +256,7 @@ export default function DreamsPage() {
                       {/* Delete button */}
                       <button
                         onClick={(e) => handleDelete(list.id, e)}
-                        className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 text-muted-foreground hover:text-destructive hover:bg-background opacity-0 group-hover:opacity-100 transition-all"
+                        className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 text-muted-foreground hover:text-destructive hover:bg-background opacity-0 group-hover:opacity-100 transition-all z-10"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
