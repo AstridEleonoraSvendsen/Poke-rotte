@@ -2,8 +2,9 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { Menu, Search, ExternalLink } from "lucide-react"
+import { Menu, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -95,10 +96,16 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
-            <Search className="h-5 w-5" />
-            <span className="sr-only">Search</span>
-          </Button>
+          {/* Pikachu Icon Replacing the old Search button shell */}
+          <Link href="/database" className="relative h-10 w-10 hover:scale-110 transition-transform">
+            <Image 
+              src="/pikachu.png" 
+              alt="Search Database" 
+              fill 
+              className="object-contain drop-shadow-md"
+              sizes="40px"
+            />
+          </Link>
         </div>
       </div>
     </header>
