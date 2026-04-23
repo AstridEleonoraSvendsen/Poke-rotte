@@ -72,50 +72,68 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [saveIndicator, setSaveIndicator] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
+// --- REPLACE YOUR CURRENT useEffect WITH THIS ---
   useEffect(() => {
+    // 1. Instantly load from local storage so the page doesn't feel slow
     setOwnedCards(loadOwnedCards(setId))
     setWishlist(loadWishlist(setId))
-  }, [setId])
 
-  useEffect(() => {
-    async function fetchData() {
+    // 2. Secretly fetch the real data from the Cloud in the background
+    async function fetchCloudOwned() {
       try {
-        const response = await fetch(`/api/pokemon/sets/${setId}`)
-        if (!response.ok) throw new Error("Failed to fetch set data")
-        const data = await response.json()
-        setSet(data.set)
-        setCards(data.cards || [])
-        setStats(data.stats)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred")
-      } finally {
-        setLoading(false)
+        const res = await fetch(`/api/owned-cards?setId=${setId}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.cards) {
+            const cloudSet = new Set<string>(data.cards);
+            setOwnedCards(cloudSet);
+            saveOwnedCards(setId, cloudSet); // Update local backup with cloud truth
+          }
+        }
+      } catch (e) {
+        console.error("Failed to sync with cloud", e);
       }
     }
-    fetchData()
+    fetchCloudOwned();
   }, [setId])
 
-  const flashSaveIndicator = () => {
-    setSaveIndicator(true)
-    setTimeout(() => setSaveIndicator(false), 1200)
-  }
+  // ... skip down past the flashSaveIndicator function ...
 
-  const toggleOwned = (cardId: string) => {
+  // --- REPLACE YOUR CURRENT toggleOwned WITH THIS ---
+  const toggleOwned = async (cardId: string) => {
     setOwnedCards((prev) => {
       const next = new Set(prev)
-      if (next.has(cardId)) {
-        next.delete(cardId)
-      } else {
+      const isAdding = !next.has(cardId)
+      
+      // Update UI instantly
+      if (isAdding) {
         next.add(cardId)
+        // Auto-remove from wishlist if we just got the card
         setWishlist((wl) => {
           const wlNext = new Set(wl)
           wlNext.delete(cardId)
           saveWishlist(setId, wlNext)
           return wlNext
         })
+      } else {
+        next.delete(cardId)
       }
+      
+      // Save locally as a backup
       saveOwnedCards(setId, next)
       flashSaveIndicator()
+
+      // Fire off the save to the Cloud Database!
+      fetch('/api/owned-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          setId: setId, 
+          cardId: cardId, 
+          action: isAdding ? 'add' : 'remove' 
+        })
+      }).catch(err => console.error("Cloud save failed:", err))
+
       return next
     })
   }
