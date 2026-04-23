@@ -1,7 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { NextResponse } from 'next/server';
 
-// THIS IS THE MAGIC LINE: It forces Vercel to never cache this route
 export const dynamic = 'force-dynamic';
 
 const TEMP_USER_ID = "temp-user-123";
@@ -46,14 +45,15 @@ export async function POST(request: Request) {
   }
 }
 
-// --- NEW DELETE FUNCTION ---
-// This allows the cloud database to actually erase the set and its cards
+// --- UPDATED DELETE FUNCTION ---
 export async function DELETE(request: Request) {
   try {
-    const { setId } = await request.json();
+    // Look for the ID in the URL, avoiding the "Ghost Body" issue
+    const { searchParams } = new URL(request.url);
+    const setId = searchParams.get('setId');
 
     if (!setId) {
-      return NextResponse.json({ error: "Set ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "Set ID is required in the URL" }, { status: 400 });
     }
 
     // 1. Delete the set folder from master_sets
