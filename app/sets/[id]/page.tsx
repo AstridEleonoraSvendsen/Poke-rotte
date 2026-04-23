@@ -71,8 +71,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [showWishlistOnly, setShowWishlistOnly] = useState(false)
   const [saveIndicator, setSaveIndicator] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false) 
 
-  // --- BLOCK 1: Syncs your checkmarks with the Cloud ---
   useEffect(() => {
     setOwnedCards(loadOwnedCards(setId))
     setWishlist(loadWishlist(setId))
@@ -95,7 +95,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     fetchCloudOwned();
   }, [setId])
 
-  // --- BLOCK 2: Fetches the actual Pokemon Cards and STOPS the spinner! ---
   useEffect(() => {
     async function fetchData() {
       try {
@@ -298,16 +297,32 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             <div className="flex gap-2">
              <Button
               className="flex-1 bg-destructive hover:bg-destructive/90 text-white"
-              onClick={() => {
+              disabled={isDeleting}
+              onClick={async () => {
+                setIsDeleting(true);
+                
+                // 1. Tell Cloud Database to delete the set using the URL parameter!
+                try {
+                  await fetch(`/api/master-sets?setId=${setId}`, {
+                    method: 'DELETE'
+                  });
+                } catch (err) {
+                  console.error("Cloud deletion failed", err);
+                }
+
+                // 2. Clear Local Storage
                 clearAll()
                 import("@/lib/collection").then((mod) => {
                   mod.removeActiveSet(setId)
                   setConfirmDelete(false)
+                  
+                  // 3. Send user home
                   window.location.href = "/";
                 })
               }}
             >
-              Yes, delete
+              {isDeleting ? <Spinner className="h-4 w-4 mr-2" /> : null}
+              {isDeleting ? "Deleting..." : "Yes, delete"}
             </Button>
             </div>
           </div>
@@ -342,7 +357,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             </div>
 
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
-              {/* Completion Stats */}
               <div className="text-center">
                 <p className="text-2xl font-bold text-primary">{completionPercent}%</p>
                 <p className="text-xs text-muted-foreground">Complete</p>
@@ -423,7 +437,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 placeholder="Find a card..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-card"
+                className="pl-10 bg-card focus:outline-ring"
               />
             </div>
             <div className="flex items-center gap-2">
