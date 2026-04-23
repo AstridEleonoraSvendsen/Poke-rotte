@@ -6,9 +6,11 @@ import Image from "next/image"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Spinner } from "@/components/ui/spinner"
 import {
   getDreamsLists, getDreamsCards, addCardToDreamsList,
   removeCardFromDreamsList, updateDreamsCardQuantity, updateDreamsList,
+  saveDreamsCards, saveDreamsLists,
   type DreamsList, type DreamsCard,
 } from "@/lib/collection"
 import {
@@ -41,6 +43,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
   const [list, setList] = useState<DreamsList | null>(null)
   const [cards, setCards] = useState<DreamsCard[]>([])
+  const [isSyncing, setIsSyncing] = useState(false)
 
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -69,10 +72,37 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sortRef = useRef<HTMLDivElement>(null)
 
+  // --- CLOUD SYNC LOGIC ---
   useEffect(() => {
-    const found = getDreamsLists().find((l) => l.id === listId)
-    if (found) { setList(found); setEditName(found.name); setEditDesc(found.description) }
+    // 1. Initial Load from Local
+    const allLists = getDreamsLists()
+    const found = allLists.find((l) => l.id === listId)
+    if (found) { 
+        setList(found); 
+        setEditName(found.name); 
+        setEditDesc(found.description) 
+    }
     setCards(getDreamsCards(listId))
+
+    // 2. Background Sync with Cloud
+    async function syncWishlist() {
+        setIsSyncing(true)
+        try {
+            const res = await fetch(`/api/dreams-cards?listId=${listId}`, { cache: 'no-store' })
+            if (res.ok) {
+                const data = await res.json()
+                if (data.cards) {
+                    setCards(data.cards)
+                    saveDreamsCards(listId, data.cards)
+                }
+            }
+        } catch (e) {
+            console.error("Failed to sync cards", e)
+        } finally {
+            setIsSyncing(false)
+        }
+    }
+    syncWishlist()
   }, [listId])
 
   useEffect(() => {
@@ -104,35 +134,81 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
   const loadMore = () => runSearch(searchQuery, searchSort, searchPage + 1, true)
 
-  const handleAddCard = (card: SearchCard) => {
-    addCardToDreamsList(listId, {
-      id: card.id, name: card.name, number: card.number, rarity: card.rarity,
-      supertype: card.supertype, setName: card.set.name, setId: card.set.id,
-      imageSmall: card.images.small, imageLarge: card.images.large,
-      marketPrice: card.marketPrice ?? undefined,
-    })
+  const handleAddCard = async (card: SearchCard) => {
+    const newCardData = {
+        id: card.id, name: card.name, number: card.number, rarity: card.rarity,
+        supertype: card.supertype, setName: card.set.name, setId: card.set.id,
+        imageSmall: card.images.small, imageLarge: card.images.large,
+        marketPrice: card.marketPrice ?? undefined,
+        listId: listId // required for cloud
+    }
+
+    // Local Save
+    addCardToDreamsList(listId, newCardData)
     setCards(getDreamsCards(listId))
     setAddedFeedback(card.id)
     setTimeout(() => setAddedFeedback(null), 1500)
+
+    // Cloud Save
+    try {
+        await fetch('/api/dreams-cards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newCardData)
+        })
+    } catch (e) { console.error("Cloud add failed", e) }
   }
 
-  const handleRemove = (cardId: string) => {
+  const handleRemove = async (cardId: string) => {
+    // Local
     removeCardFromDreamsList(listId, cardId)
     setCards(getDreamsCards(listId))
+
+    // Cloud
+    try {
+        await fetch('/api/dreams-cards', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ listId, cardId })
+        })
+    } catch (e) { console.error("Cloud remove failed", e) }
   }
 
-  const handleQuantity = (cardId: string, delta: number) => {
+  const handleQuantity = async (cardId: string, delta: number) => {
     const card = cards.find((c) => c.id === cardId)
     if (!card) return
-    updateDreamsCardQuantity(listId, cardId, card.quantity + delta)
+    const newQty = card.quantity + delta
+    
+    // Local
+    updateDreamsCardQuantity(listId, cardId, newQty)
     setCards(getDreamsCards(listId))
+
+    // Cloud - We use the POST route which handles quantity updates
+    try {
+        await fetch('/api/dreams-cards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...card, quantity: newQty, listId })
+        })
+    } catch (e) { console.error("Cloud qty update failed", e) }
   }
 
-  const saveEdit = () => {
+  const saveEdit = async () => {
     if (!editName.trim() || !list) return
+    
+    // Local
     updateDreamsList(listId, { name: editName.trim(), description: editDesc.trim() })
     setList(prev => prev ? { ...prev, name: editName.trim(), description: editDesc.trim() } : prev)
     setEditOpen(false)
+
+    // Cloud
+    try {
+        await fetch('/api/dreams-lists', {
+            method: 'POST', // Use POST to overwrite/update the list info
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: listId, name: editName.trim(), description: editDesc.trim() })
+        })
+    } catch (e) { console.error("Cloud list update failed", e) }
   }
 
   const isInList = (cardId: string) => cards.some((c) => c.id === cardId)
@@ -145,7 +221,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
       switch (wishlistSort) {
         case "name":   return a.name.localeCompare(b.name)
         case "set":    return a.setName.localeCompare(b.setName)
-        case "rarity": return a.rarity.localeCompare(b.rarity)
+        case "rarity": return (a.rarity || "").localeCompare(b.rarity || "")
         default:       return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
       }
     })
@@ -211,6 +287,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="h-4 w-4 text-primary" />
               <span className="text-xs font-semibold tracking-widest uppercase text-primary">Wishlist</span>
+              {isSyncing && <Spinner className="h-3 w-3 animate-spin text-muted-foreground" />}
             </div>
             <div className="flex items-center gap-2">
               <h1 className="text-3xl font-bold tracking-tight">{list.name}</h1>
@@ -223,7 +300,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             {list.description && <p className="text-muted-foreground mt-1">{list.description}</p>}
           </div>
 
-          {/* Stats row */}
           <div className="flex gap-2 flex-shrink-0 flex-wrap">
             <div className="rounded-lg border bg-card px-4 py-2 text-center min-w-[72px]">
               <p className="text-2xl font-bold">{totalCards}</p>
@@ -265,7 +341,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               )}
             </div>
 
-            {/* Sort dropdown */}
             <div ref={sortRef} className="relative">
               <button onClick={() => setSortOpen(v => !v)}
                 className="flex items-center gap-2 h-11 px-4 rounded-lg border bg-background text-sm font-medium hover:bg-secondary/50 transition-colors whitespace-nowrap">
@@ -286,7 +361,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               )}
             </div>
 
-            {/* Grid/List toggle */}
             <div className="flex rounded-lg border bg-background p-1 gap-0.5">
               <button onClick={() => setViewMode("grid")}
                 className={cn("p-2 rounded-md transition-colors", viewMode === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}>
@@ -299,17 +373,15 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           </div>
 
-          {/* Results count */}
           {hasSearched && !searchLoading && (
             <p className="text-sm text-muted-foreground mb-4">
               <span className="font-semibold text-foreground">{searchTotal}</span> cards found for "{searchQuery}"
             </p>
           )}
 
-          {/* States */}
           {searchLoading && searchResults.length === 0 && (
             <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <Spinner className="h-8 w-8 animate-spin text-primary" />
             </div>
           )}
           {hasSearched && !searchLoading && searchResults.length === 0 && (
@@ -321,7 +393,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           )}
 
-          {/* ── GRID VIEW ── */}
           {searchResults.length > 0 && viewMode === "grid" && (
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {searchResults.map(card => {
@@ -358,7 +429,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           )}
 
-          {/* ── LIST VIEW ── */}
           {searchResults.length > 0 && viewMode === "list" && (
             <div className="flex flex-col divide-y divide-border/50">
               {searchResults.map(card => {
@@ -398,7 +468,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           )}
           {searchLoading && searchResults.length > 0 && (
             <div className="mt-4 flex justify-center">
-              <div className="h-6 w-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <Spinner className="h-6 w-6 animate-spin text-primary" />
             </div>
           )}
         </div>
@@ -411,7 +481,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input placeholder="Filter..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="pl-8 h-8 w-40 text-sm bg-card" />
+                  <Input placeholder="Filter..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="pl-8 h-8 w-40 text-sm bg-card focus:outline-ring" />
                 </div>
                 <span className="text-sm text-muted-foreground">Sort:</span>
                 {(["added", "name", "set", "rarity"] as WishlistSort[]).map(mode => (
