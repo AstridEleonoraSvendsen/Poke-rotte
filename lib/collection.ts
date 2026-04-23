@@ -186,7 +186,6 @@ export interface ActiveSet {
 const DEFAULT_SETS: ActiveSet[] = [
   { id: "xy5",       name: "Primal Clash",       series: "XY Series",        totalCards: 164, releaseDate: "Feb 2015" },
   { id: "base1",     name: "Base Set",           series: "Base Series",      totalCards: 102, releaseDate: "Jan 1999" },
-  { id: "sv8pt5",    name: "Prismatic Evolutions", series: "Scarlet & Violet", totalCards: 258, releaseDate: "Jan 2025" },
 ]
 
 export function getActiveSets(): ActiveSet[] {
