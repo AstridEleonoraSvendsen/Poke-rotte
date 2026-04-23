@@ -43,7 +43,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
   const [list, setList] = useState<DreamsList | null>(null)
   const [cards, setCards] = useState<DreamsCard[]>([])
-  const [isSyncing, setIsSyncing] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(true)
+  const [hasCheckedCloud, setHasCheckedCloud] = useState(false)
 
   // Search
   const [searchQuery, setSearchQuery] = useState("")
@@ -88,6 +89,22 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
     async function syncWishlist() {
         setIsSyncing(true)
         try {
+            // First, fetch the lists to make sure we have the folder info
+            const listRes = await fetch('/api/dreams-lists', { cache: 'no-store' })
+            if (listRes.ok) {
+              const listData = await listRes.json()
+              const cloudLists: DreamsList[] = listData.lists || []
+              saveDreamsLists(cloudLists)
+              
+              const currentList = cloudLists.find(l => l.id === listId)
+              if (currentList) {
+                setList(currentList)
+                setEditName(currentList.name)
+                setEditDesc(currentList.description)
+              }
+            }
+
+            // Then, fetch the cards
             const res = await fetch(`/api/dreams-cards?listId=${listId}`, { cache: 'no-store' })
             if (res.ok) {
                 const data = await res.json()
@@ -100,6 +117,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             console.error("Failed to sync cards", e)
         } finally {
             setIsSyncing(false)
+            setHasCheckedCloud(true)
         }
     }
     syncWishlist()
@@ -140,16 +158,14 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
         supertype: card.supertype, setName: card.set.name, setId: card.set.id,
         imageSmall: card.images.small, imageLarge: card.images.large,
         marketPrice: card.marketPrice ?? undefined,
-        listId: listId // required for cloud
+        listId: listId
     }
 
-    // Local Save
     addCardToDreamsList(listId, newCardData)
     setCards(getDreamsCards(listId))
     setAddedFeedback(card.id)
     setTimeout(() => setAddedFeedback(null), 1500)
 
-    // Cloud Save
     try {
         await fetch('/api/dreams-cards', {
             method: 'POST',
@@ -160,11 +176,9 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
   }
 
   const handleRemove = async (cardId: string) => {
-    // Local
     removeCardFromDreamsList(listId, cardId)
     setCards(getDreamsCards(listId))
 
-    // Cloud
     try {
         await fetch('/api/dreams-cards', {
             method: 'DELETE',
@@ -179,11 +193,9 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
     if (!card) return
     const newQty = card.quantity + delta
     
-    // Local
     updateDreamsCardQuantity(listId, cardId, newQty)
     setCards(getDreamsCards(listId))
 
-    // Cloud - We use the POST route which handles quantity updates
     try {
         await fetch('/api/dreams-cards', {
             method: 'POST',
@@ -196,15 +208,13 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
   const saveEdit = async () => {
     if (!editName.trim() || !list) return
     
-    // Local
     updateDreamsList(listId, { name: editName.trim(), description: editDesc.trim() })
     setList(prev => prev ? { ...prev, name: editName.trim(), description: editDesc.trim() } : prev)
     setEditOpen(false)
 
-    // Cloud
     try {
         await fetch('/api/dreams-lists', {
-            method: 'POST', // Use POST to overwrite/update the list info
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: listId, name: editName.trim(), description: editDesc.trim() })
         })
@@ -230,14 +240,30 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
   const totalPrice = cards.reduce((a, c) => a + (c.marketPrice ?? 0) * c.quantity, 0)
   const priceKnownCount = cards.filter(c => c.marketPrice != null).length
 
-  if (!list) return (
-    <div className="min-h-screen bg-background"><Header />
-      <div className="container mx-auto px-4 py-24 text-center">
-        <p className="text-muted-foreground">Wishlist not found.</p>
-        <Link href="/dreams" className="mt-4 inline-block text-primary hover:underline">Back to Poke Dreams</Link>
+  // LOADING STATE
+  if (!list && !hasCheckedCloud) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex flex-col items-center justify-center py-24">
+          <Spinner className="h-8 w-8 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Finding your rat list...</p>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
+
+  // NOT FOUND STATE
+  if (!list && hasCheckedCloud) {
+    return (
+      <div className="min-h-screen bg-background"><Header />
+        <div className="container mx-auto px-4 py-24 text-center">
+          <p className="text-muted-foreground">Wishlist not found.</p>
+          <Link href="/dreams" className="mt-4 inline-block text-primary hover:underline">Back to Poke Dreams</Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -287,17 +313,17 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             <div className="flex items-center gap-2 mb-1">
               <Sparkles className="h-4 w-4 text-primary" />
               <span className="text-xs font-semibold tracking-widest uppercase text-primary">Wishlist</span>
-              {isSyncing && <Spinner className="h-3 w-3 animate-spin text-muted-foreground" />}
+              {isSyncing && <Spinner className="h-3 w-3 animate-spin text-muted-foreground ml-2" />}
             </div>
             <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold tracking-tight">{list.name}</h1>
+              <h1 className="text-3xl font-bold tracking-tight">{list?.name}</h1>
               <button onClick={() => setEditOpen(true)}
                 className="text-muted-foreground hover:text-foreground transition-colors"
                 title="Edit wishlist">
                 <Pencil className="h-4 w-4" />
               </button>
             </div>
-            {list.description && <p className="text-muted-foreground mt-1">{list.description}</p>}
+            {list?.description && <p className="text-muted-foreground mt-1">{list.description}</p>}
           </div>
 
           <div className="flex gap-2 flex-shrink-0 flex-wrap">
@@ -466,11 +492,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               <Button variant="outline" onClick={loadMore}>Load more results</Button>
             </div>
           )}
-          {searchLoading && searchResults.length > 0 && (
-            <div className="mt-4 flex justify-center">
-              <Spinner className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          )}
         </div>
 
         {/* ── MY WISHLIST CARDS ─────────────────────────────── */}
@@ -538,7 +559,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           </>
         )}
 
-        {cards.length === 0 && (
+        {cards.length === 0 && hasCheckedCloud && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <Heart className="h-8 w-8 text-primary" />
