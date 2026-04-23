@@ -6,13 +6,14 @@ import { Header } from "@/components/header"
 import { MasterSetCard } from "@/components/master-set-card"
 import { Button } from "@/components/ui/button"
 import { Plus, Search, X } from "lucide-react"
-import { getAllOwnedCounts, type ActiveSet } from "@/lib/collection"
+import { getAllOwnedCounts, getActiveSets, saveActiveSets, type ActiveSet } from "@/lib/collection"
 import { toast } from "sonner"
 
 export default function HomePage() {
   const [ownedCounts, setOwnedCounts] = useState<Record<string, number>>({})
   const [activeSets, setActiveSets] = useState<ActiveSet[]>([])
-  const [isLoadingSets, setIsLoadingSets] = useState(true)
+  // Start loading as FALSE so the local storage instantly shows on screen!
+  const [isLoadingSets, setIsLoadingSets] = useState(false) 
   
   // States for the "Add New Set" popup
   const [isAddingSet, setIsAddingSet] = useState(false)
@@ -20,29 +21,35 @@ export default function HomePage() {
   const [searchResults, setSearchResults] = useState<ActiveSet[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
-  // Load the sets from the CLOUD Database when the page opens
   useEffect(() => {
+    // 1. INSTANT LOAD: Grab data from local storage so the screen paints immediately
     setOwnedCounts(getAllOwnedCounts())
+    const localSets = getActiveSets()
+    setActiveSets(localSets)
 
-    async function loadCloudSets() {
+    // 2. BACKGROUND SYNC: Fetch the cloud data to make sure we are perfectly up to date
+    async function syncWithCloud() {
       try {
-        // 1. Get the IDs you own from the Postgres Database
-        const cloudRes = await fetch('/api/master-sets', { cache: 'no-store' })
-        const cloudData = await cloudRes.json()
-        const ownedIds: string[] = cloudData.masterSets || []
+        // Use Promise.all to fetch the DB and the Pokemon Catalog at the EXACT SAME TIME
+        const [cloudRes, catalogRes] = await Promise.all([
+          fetch('/api/master-sets', { cache: 'no-store' }),
+          fetch('/api/pokemon/sets', { next: { revalidate: 3600 } }) // Cache catalog for 1 hour to speed it up!
+        ]);
 
-        if (ownedIds.length === 0) {
-          setActiveSets([])
-          setIsLoadingSets(false)
-          return
+        if (!cloudRes.ok || !catalogRes.ok) return;
+
+        const cloudData = await cloudRes.json();
+        const catalogData = await catalogRes.json();
+
+        const ownedIds: string[] = cloudData.masterSets || [];
+        const allSets = catalogData.sets || [];
+
+        // If the cloud is empty, but we have local sets, the user probably just cleared their cloud.
+        if (ownedIds.length === 0 && localSets.length === 0) {
+          return;
         }
 
-        // 2. Fetch the global catalog to get the names and logos for those IDs
-        const catalogRes = await fetch('/api/pokemon/sets')
-        const catalogData = await catalogRes.json()
-        const allSets = catalogData.sets || []
-
-        // 3. Match them up
+        // Match Cloud IDs with the Catalog to build the fresh list
         const mappedSets: ActiveSet[] = ownedIds.map(id => {
           const found = allSets.find((s: any) => s.id === id)
           if (found) {
@@ -58,16 +65,16 @@ export default function HomePage() {
           return null
         }).filter(Boolean) as ActiveSet[]
 
-        setActiveSets(mappedSets)
+        // Update the screen and local backup silently
+        setActiveSets(mappedSets);
+        saveActiveSets(mappedSets); 
+
       } catch (err) {
-        console.error("Failed to load cloud sets", err)
-        toast.error("Failed to load your Master Sets.")
-      } finally {
-        setIsLoadingSets(false)
+        console.error("Background sync failed", err);
       }
     }
 
-    loadCloudSets()
+    syncWithCloud();
   }, [])
 
   // The Search Function for the API
@@ -106,13 +113,16 @@ export default function HomePage() {
     }
     
     // Update UI instantly
-    setActiveSets(prev => [...prev, newSet]);
+    const updatedSets = [...activeSets, newSet];
+    setActiveSets(updatedSets);
+    saveActiveSets(updatedSets); // Save locally instantly
+    
     setIsAddingSet(false);
     setSearchQuery("");
     setSearchResults([]);
     toast.success(`${newSet.name} added to Master Sets!`);
 
-    // Save to Postgres
+    // Save to Postgres silently in the background
     try {
       await fetch('/api/master-sets', {
         method: 'POST',
@@ -158,7 +168,7 @@ export default function HomePage() {
                 <input 
                   type="text" 
                   placeholder="Search set name (e.g. 'Evolutions', '151')" 
-                  className="flex-1 px-4 py-2 rounded-md bg-background border text-sm"
+                  className="flex-1 px-4 py-2 rounded-md bg-background border text-sm focus:outline-ring"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -244,7 +254,7 @@ export default function HomePage() {
             <MasterSetCard key={set.id} {...set} />
           ))}
           
-        {isLoadingSets && (
+          {isLoadingSets && (
             <div className="col-span-full py-20 text-center text-muted-foreground">
               Loading rat data from the shadows...
             </div>
