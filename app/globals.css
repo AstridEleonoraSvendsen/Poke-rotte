@@ -4,74 +4,62 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.17 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.15 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.65 0.2 145);
-  --primary-foreground: oklch(0.13 0.01 260);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.55 0.22 30);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.22 0.01 260);
-  --ring: oklch(0.65 0.2 145);
-  --chart-1: oklch(0.65 0.2 145);
-  --chart-2: oklch(0.55 0.22 30);
-  --chart-3: oklch(0.6 0.18 250);
-  --chart-4: oklch(0.75 0.18 85);
-  --chart-5: oklch(0.65 0.2 320);
+  /* --- The Core Background and Text --- */
+  --background: oklch(0.89 0 0); /* #dddddd - The main page background */
+  --foreground: oklch(0.15 0 0); /* Standard Black text */
+
+  /* --- Cards and Popovers (Making them white so they pop off the background) --- */
+  --card: oklch(1 0 0); /* Pure White */
+  --card-foreground: oklch(0.15 0 0); /* Standard Black text on cards */
+  --popover: oklch(1 0 0); /* Pure White for dropdown menus */
+  --popover-foreground: oklch(0.15 0 0);
+
+  /* --- Primary Brand Color (The new Blue for buttons, logos, and active hearts) --- */
+  --primary: oklch(0.65 0.1 245); /* #5998c5 */
+  --primary-foreground: oklch(1 0 0); /* White text inside the blue buttons */
+
+  /* --- Secondary/Muted Elements (The specific grey for nav links and subtext) --- */
+  --secondary: oklch(0.95 0 0); /* Very light grey for button hovers */
+  --secondary-foreground: oklch(0.53 0 0); /* #696969 */
+  --muted: oklch(0.95 0 0); /* Light background for disabled states */
+  --muted-foreground: oklch(0.53 0 0); /* #696969 - Used for subsections and inactive nav links */
+
+  /* --- Accents and Focus Rings --- */
+  --accent: oklch(0.95 0 0); /* Light hover states */
+  --accent-foreground: oklch(0.15 0 0);
+  --destructive: oklch(0.6 0.2 25); /* Red for delete buttons */
+  --destructive-foreground: oklch(1 0 0);
+  
+  /* --- Borders and Outlines --- */
+  --border: oklch(0.8 0 0); /* Soft grey border */
+  --input: oklch(0.8 0 0); /* Soft border for inputs */
+  --ring: oklch(0.83 0.1 10); /* #ffc1cc - The bubblegum pink outline when you click search! */
+
+  /* --- Radius (Keeping your rounded corners) --- */
   --radius: 0.5rem;
-  --sidebar: oklch(0.15 0.01 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.65 0.2 145);
-  --sidebar-primary-foreground: oklch(0.13 0.01 260);
-  --sidebar-accent: oklch(0.22 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.01 260);
-  --sidebar-ring: oklch(0.65 0.2 145);
 }
 
+/* Force light mode to always apply, overriding any system dark mode preferences */
 .dark {
-  --background: oklch(0.13 0.01 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.17 0.01 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.15 0.01 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.65 0.2 145);
-  --primary-foreground: oklch(0.13 0.01 260);
-  --secondary: oklch(0.22 0.01 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.22 0.01 260);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.55 0.22 30);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.95 0 0);
-  --border: oklch(0.28 0.01 260);
-  --input: oklch(0.22 0.01 260);
-  --ring: oklch(0.65 0.2 145);
-  --chart-1: oklch(0.65 0.2 145);
-  --chart-2: oklch(0.55 0.22 30);
-  --chart-3: oklch(0.6 0.18 250);
-  --chart-4: oklch(0.75 0.18 85);
-  --chart-5: oklch(0.65 0.2 320);
-  --sidebar: oklch(0.15 0.01 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.65 0.2 145);
-  --sidebar-primary-foreground: oklch(0.13 0.01 260);
-  --sidebar-accent: oklch(0.22 0.01 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.28 0.01 260);
-  --sidebar-ring: oklch(0.65 0.2 145);
+  --background: oklch(0.89 0 0);
+  --foreground: oklch(0.15 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.15 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.15 0 0);
+  --primary: oklch(0.65 0.1 245);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0 0);
+  --secondary-foreground: oklch(0.53 0 0);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.53 0 0);
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: oklch(0.15 0 0);
+  --destructive: oklch(0.6 0.2 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.8 0 0);
+  --input: oklch(0.8 0 0);
+  --ring: oklch(0.83 0.1 10);
 }
 
 @theme inline {
@@ -96,23 +84,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
