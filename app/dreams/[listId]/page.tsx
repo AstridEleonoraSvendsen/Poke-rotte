@@ -37,10 +37,9 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-asc":        "Price: Low to High",
 }
 
-export default function DreamsListPage({ params }: { params: Promise<any> }) {
+export default function DreamsListPage({ params }: { params: Promise<{ listId: string }> }) {
   const resolvedParams = use(params)
-  // This bulletproofs it! It will check for BOTH folder names.
-  const listId = resolvedParams.listId || resolvedParams.id
+  const listId = resolvedParams.listId
 
   const [list, setList] = useState<DreamsList | null>(null)
   const [cards, setCards] = useState<DreamsCard[]>([])
@@ -81,7 +80,7 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
     async function syncData() {
       setIsSyncing(true)
       
-      // 1. Instantly load local data (so you don't stare at a blank screen)
+      // 1. Instantly load local data
       const localLists = getDreamsLists()
       const localFound = localLists.find((l) => l.id === listId)
       if (localFound) { 
@@ -134,7 +133,7 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
       }
     }
 
-    syncData()
+    if (listId) syncData()
   }, [listId])
 
   useEffect(() => {
@@ -211,7 +210,6 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
     updateDreamsCardQuantity(listId, cardId, newQuantity)
     setCards(getDreamsCards(listId))
 
-    // Because we fixed the API, sending the absolute quantity works perfectly now!
     try {
       await fetch('/api/dreams-cards', {
         method: 'POST',
@@ -254,16 +252,18 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
 
   const totalCards = cards.reduce((a, c) => a + c.quantity, 0)
   const totalPrice = cards.reduce((a, c) => a + (c.marketPrice ?? 0) * c.quantity, 0)
+  
+  // FIX: Safety check for price mapping!
   const priceKnownCount = cards.filter(c => c.marketPrice != null).length
 
-  // Loading Screen (Prevents the crash)
+  // Loading Screen
   if (!list && isSyncing) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
         <div className="flex flex-col items-center justify-center py-32 text-center">
           <Spinner className="h-10 w-10 text-primary mb-4" />
-          <p className="text-muted-foreground">Finding your rat list...</p>
+          <p className="text-muted-foreground font-medium">Finding your rat list...</p>
         </div>
       </div>
     )
@@ -319,9 +319,8 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
       )}
 
       <main className="container mx-auto px-4 py-8 max-w-7xl">
-
-        <Link href="/dreams" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="h-4 w-4" />Back to Poke Dreams
+        <Link href="/dreams" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground font-medium hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> Back to Poke Dreams
         </Link>
 
         {/* Page header */}
@@ -343,7 +342,6 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
             {list?.description && <p className="text-muted-foreground mt-1">{list.description}</p>}
           </div>
 
-          {/* Stats row */}
           <div className="flex gap-2 flex-shrink-0 flex-wrap">
             <div className="rounded-lg border bg-card px-4 py-2 text-center min-w-[72px]">
               <p className="text-2xl font-bold">{totalCards}</p>
@@ -375,7 +373,7 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
                 placeholder="Search by Pokémon name e.g. Mew, Charizard..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-11 h-11 bg-background"
+                className="pl-11 h-11 bg-background focus:outline-ring"
               />
               {searchQuery && (
                 <button onClick={() => { setSearchQuery(""); setSearchResults([]); setHasSearched(false) }}
@@ -450,9 +448,12 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
                 return (
                   <div key={card.id} className="group flex flex-col">
                     <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
-                      <Image src={card.images.small} alt={card.name} fill
-                        className="object-cover transition-transform duration-200 group-hover:scale-105"
-                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
+                      {/* FIX: Safe image check! */}
+                      {card.images?.small && (
+                        <Image src={card.images.small} alt={card.name || "Card"} fill
+                          className="object-cover transition-transform duration-200 group-hover:scale-105"
+                          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
+                      )}
                       <button
                         onClick={() => !inList && !justAdded && handleAddCard(card)}
                         className={cn(
@@ -466,7 +467,7 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
                     </div>
                     <div className="mt-2 flex flex-col gap-0.5 min-h-[64px]">
                       <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{card.set.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{card.set?.name}</p>
                       <p className="text-[11px] text-muted-foreground">#{card.number}</p>
                       <p className="text-xs font-semibold text-primary mt-auto">
                         {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
@@ -487,11 +488,13 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
                 return (
                   <div key={card.id} className="flex items-center gap-3 py-2.5 hover:bg-secondary/30 rounded-lg px-2 transition-colors">
                     <div className="relative h-14 w-10 flex-shrink-0 rounded-md overflow-hidden shadow">
-                      <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="40px" />
+                      {card.images?.small && (
+                        <Image src={card.images.small} alt={card.name || "Card"} fill className="object-cover" sizes="40px" />
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{card.name}</p>
-                      <p className="text-xs text-muted-foreground">#{card.number} · {card.set.name}</p>
+                      <p className="text-xs text-muted-foreground">#{card.number} · {card.set?.name}</p>
                       {card.rarity && <span className="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] bg-secondary text-muted-foreground">{card.rarity}</span>}
                     </div>
                     <div className="text-right flex-shrink-0">
@@ -514,11 +517,6 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
           {searchHasMore && !searchLoading && (
             <div className="mt-6 text-center">
               <Button variant="outline" onClick={loadMore}>Load more results</Button>
-            </div>
-          )}
-          {searchLoading && searchResults.length > 0 && (
-            <div className="mt-4 flex justify-center">
-              <Spinner className="h-6 w-6 text-primary" />
             </div>
           )}
         </div>
@@ -548,9 +546,12 @@ export default function DreamsListPage({ params }: { params: Promise<any> }) {
               {sortedWishlistCards.map(card => (
                 <div key={card.id} className="group flex flex-col">
                   <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
-                    <Image src={card.imageSmall} alt={card.name} fill
-                      className="object-cover transition-transform duration-200 group-hover:scale-105"
-                      sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
+                    {/* FIX: Safe image check here too */}
+                    {card.imageSmall && (
+                      <Image src={card.imageSmall} alt={card.name || "Card"} fill
+                        className="object-cover transition-transform duration-200 group-hover:scale-105"
+                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
+                    )}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <button onClick={() => handleRemove(card.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-white rounded-lg text-xs font-medium">
