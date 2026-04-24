@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
-import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle, Coins, X } from "lucide-react"
+import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle, Coins, X, Check } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 import {
   DropdownMenu,
@@ -71,7 +71,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [ownedCards, setOwnedCards] = useState<Set<string>>(new Set())
   const [wishlist, setWishlist] = useState<Set<string>>(new Set())
   
-  // NEW: Pricing States
+  // Pricing States
   const [cardPrices, setCardPrices] = useState<Record<string, { price: number, currency: Currency }>>({})
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("EUR")
   const [priceModalOpen, setPriceModalOpen] = useState(false)
@@ -110,7 +110,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           if (data.cardData) {
             const prices: Record<string, { price: number, currency: Currency }> = {};
             data.cardData.forEach((row: any) => {
-              if (row.paidPrice) {
+              if (row.paidPrice != null) {
                 prices[row.cardId] = { 
                   price: Number(row.paidPrice), 
                   currency: (row.currency as Currency) || "EUR" 
@@ -166,6 +166,11 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         })
       } else {
         next.delete(cardId)
+        // Optionally remove price if un-owned
+        const newPrices = { ...cardPrices }
+        delete newPrices[cardId]
+        setCardPrices(newPrices)
+        localStorage.setItem(`prices:${setId}`, JSON.stringify(newPrices))
       }
       
       saveOwnedCards(setId, next)
@@ -186,7 +191,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   }
 
   const openPriceModal = (cardId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevents clicking the card behind it
+    e.preventDefault();
     setSelectedCardId(cardId);
     if (cardPrices[cardId]) {
       setPriceInput(cardPrices[cardId].price.toString());
@@ -201,11 +207,9 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const savePrice = async () => {
     if (!selectedCardId) return;
     
-    // Allow commas for European decimal inputs
     const parsedPrice = parseFloat(priceInput.replace(',', '.'));
     if (isNaN(parsedPrice) || parsedPrice < 0) return;
 
-    // Update Local
     const newPrices = { 
       ...cardPrices, 
       [selectedCardId]: { price: parsedPrice, currency: currencyInput } 
@@ -215,7 +219,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     setPriceModalOpen(false);
     flashSaveIndicator();
 
-    // Update Cloud
     try {
       await fetch('/api/owned-cards', {
         method: 'POST',
@@ -242,11 +245,14 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     const empty = new Set<string>()
     setOwnedCards(empty)
     saveOwnedCards(setId, empty)
+    setCardPrices({})
+    localStorage.removeItem(`prices:${setId}`)
     flashSaveIndicator()
   }
 
   const toggleWishlist = (cardId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    e.preventDefault()
     setWishlist((prev) => {
       const next = new Set(prev)
       if (next.has(cardId)) {
@@ -373,10 +379,10 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* PRICE MODAL */}
+      {/* PRICE MODAL - Clean overlay, z-index high enough so it doesn't crash underneath */}
       {priceModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-xs mx-4 p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-xs mx-4 p-6" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold">Paid Price</h2>
               <button onClick={() => setPriceModalOpen(false)} className="text-muted-foreground hover:text-foreground">
@@ -392,7 +398,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 placeholder="0.00" 
                 value={priceInput} 
                 onChange={e => setPriceInput(e.target.value)} 
-                className="flex-1 text-lg"
+                className="flex-1 text-lg font-semibold"
                 autoFocus
                 onKeyDown={e => e.key === 'Enter' && savePrice()}
               />
@@ -405,11 +411,9 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 <option value="DKK">kr DKK</option>
               </select>
             </div>
-            <div className="flex gap-2">
-              <Button className="flex-1 gap-2" onClick={savePrice}>
-                <Check className="h-4 w-4" /> Save
-              </Button>
-            </div>
+            <Button className="w-full gap-2" onClick={savePrice}>
+              <Check className="h-4 w-4" /> Save Price
+            </Button>
           </div>
         </div>
       )}
@@ -484,14 +488,14 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
 
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
               
-              {/* NEW SMART TOTAL BLOCK */}
+              {/* SMART TOTAL BLOCK */}
               <div 
                 className="text-center cursor-pointer hover:bg-secondary/40 p-2 rounded-lg transition-colors group"
                 onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
                 title="Click to toggle EUR / DKK"
               >
                 <p className="text-2xl font-bold text-primary transition-transform group-active:scale-95">
-                  {displayCurrency === "EUR" ? "€" : "kr"}
+                  {displayCurrency === "EUR" ? "€" : "kr "}
                   {totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
@@ -632,6 +636,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           <div className="grid gap-x-3 gap-y-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
             {filteredAndSortedCards.map((card) => (
               <div key={card.id} className="group flex flex-col">
+                
+                {/* 1. The Clickable Card Area */}
                 <div
                   onClick={() => toggleOwned(card.id)}
                   role="button"
@@ -681,30 +687,34 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                       wishlist.has(card.id) ? "fill-pink-500 text-pink-500" : "text-white"
                     )} />
                   </button>
-
-                  {/* NEW: COIN BUTTON FOR PRICING */}
+                </div>
+                
+                {/* 2. The Info Section (Name, Number, and Coin Button) */}
+                <div className="mt-2 flex items-start justify-between gap-1">
+                  <div className="flex flex-col gap-px overflow-hidden min-w-0">
+                    <p className="text-[10px] font-semibold leading-tight truncate">
+                      {card.isReverseHolo ? (card.name || "").replace(" Reverse Holo", "") : (card.name || "Unknown")}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground truncate">
+                      #{card.number || "??"}{card.isReverseHolo ? " · Rev Holo" : ""}
+                    </p>
+                  </div>
+                  
+                  {/* The newly moved Coin Button - completely separated from the card click! */}
                   {ownedCards.has(card.id) && (
                     <button
                       onClick={(e) => openPriceModal(card.id, e)}
                       className={cn(
-                        "absolute bottom-1 right-1 p-1.5 rounded-full shadow-lg transition-transform hover:scale-110 z-20",
-                        cardPrices[card.id] ? "bg-yellow-500 text-white" : "bg-primary/90 hover:bg-primary text-white"
+                        "p-1 rounded-md flex-shrink-0 transition-colors hover:scale-110",
+                        cardPrices[card.id] ? "bg-yellow-500/20 text-yellow-600 hover:bg-yellow-500 hover:text-white" : "bg-secondary text-muted-foreground hover:bg-primary hover:text-white"
                       )}
-                      title="Set paid price"
+                      title="Add paid price"
                     >
-                      <Coins className="h-3.5 w-3.5" />
+                      <Coins className="h-3 w-3" />
                     </button>
                   )}
                 </div>
-                
-                <div className="mt-1.5 flex flex-col gap-px">
-                  <p className="text-[10px] font-semibold leading-tight truncate">
-                    {card.isReverseHolo ? (card.name || "").replace(" Reverse Holo", "") : (card.name || "Unknown")}
-                  </p>
-                  <p className="text-[9px] text-muted-foreground">
-                    #{card.number || "??"}{card.isReverseHolo ? " · Reverse Holo" : ""}
-                  </p>
-                </div>
+
               </div>
             ))}
           </div>
