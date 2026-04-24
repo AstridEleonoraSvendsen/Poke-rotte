@@ -13,6 +13,9 @@ interface MasterSetCardProps {
   ownedCards: number
   releaseDate: string
   logoUrl?: string
+  // NEW: Accept value and currency from the dashboard
+  value?: number 
+  displayCurrency?: "EUR" | "DKK"
 }
 
 export function MasterSetCard({
@@ -23,9 +26,14 @@ export function MasterSetCard({
   ownedCards,
   releaseDate,
   logoUrl,
+  value = 0,
+  displayCurrency = "EUR"
 }: MasterSetCardProps) {
   const progress = Math.round((ownedCards / totalCards) * 100)
   const missing = totalCards - ownedCards
+  
+  const currencySymbol = displayCurrency === "EUR" ? "€" : "kr "
+  const formattedValue = value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   
   return (
     <Link href={`/sets/${id}`}>
@@ -61,12 +69,22 @@ export function MasterSetCard({
               <p className="text-xl font-bold">{ownedCards}</p>
               <p className="text-[10px] text-muted-foreground">Owned</p>
             </div>
+            
             <div className="text-center">
               <p className="text-xl font-bold">{totalCards}</p>
               <p className="text-[10px] text-muted-foreground">Total</p>
             </div>
+            
+            {/* NEW VALUE BLOCK */}
             <div className="text-center">
-              <p className="text-xl font-bold text-primary">{progress}%</p>
+              <p className="text-xl font-bold text-primary">
+                {currencySymbol}{formattedValue}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Value</p>
+            </div>
+
+            <div className="text-center">
+              <p className="text-xl font-bold">{progress}%</p>
               <p className="text-[10px] text-muted-foreground">Complete</p>
             </div>
           </div>
