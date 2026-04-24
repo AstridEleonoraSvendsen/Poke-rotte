@@ -5,15 +5,22 @@ import Image from "next/image"
 import { Header } from "@/components/header"
 import { MasterSetCard } from "@/components/master-set-card"
 import { Button } from "@/components/ui/button"
-import { Plus, Search, X } from "lucide-react"
+import { Plus, Search, X, ArrowUpDown } from "lucide-react"
 import { getAllOwnedCounts, getActiveSets, saveActiveSets, type ActiveSet } from "@/lib/collection"
 import { toast } from "sonner"
+
+// 1 EUR = 7.46 DKK
+const EUR_TO_DKK = 7.46;
+type Currency = "EUR" | "DKK"
 
 export default function HomePage() {
   const [ownedCounts, setOwnedCounts] = useState<Record<string, number>>({})
   const [activeSets, setActiveSets] = useState<ActiveSet[]>([])
-  // Start loading as FALSE so the local storage instantly shows on screen!
   const [isLoadingSets, setIsLoadingSets] = useState(false) 
+  
+  // NEW: Global Pricing State
+  const [setValues, setSetValues] = useState<Record<string, { eur: number, dkk: number }>>({})
+  const [displayCurrency, setDisplayCurrency] = useState<Currency>("EUR")
   
   // States for the "Add New Set" popup
   const [isAddingSet, setIsAddingSet] = useState(false)
@@ -27,13 +34,30 @@ export default function HomePage() {
     const localSets = getActiveSets()
     setActiveSets(localSets)
 
+    // Calculate Prices from LocalStorage instantly
+    const calculatedValues: Record<string, { eur: number, dkk: number }> = {}
+    localSets.forEach(set => {
+      try {
+        const localPrices = localStorage.getItem(`prices:${set.id}`)
+        if (localPrices) {
+          const prices = JSON.parse(localPrices)
+          let eur = 0, dkk = 0;
+          Object.values(prices).forEach((p: any) => {
+            if (p.currency === "DKK") dkk += p.price;
+            else eur += p.price;
+          });
+          calculatedValues[set.id] = { eur, dkk }
+        }
+      } catch {}
+    })
+    setSetValues(calculatedValues)
+
     // 2. BACKGROUND SYNC: Fetch the cloud data to make sure we are perfectly up to date
     async function syncWithCloud() {
       try {
-        // Use Promise.all to fetch the DB and the Pokemon Catalog at the EXACT SAME TIME
         const [cloudRes, catalogRes] = await Promise.all([
           fetch('/api/master-sets', { cache: 'no-store' }),
-          fetch('/api/pokemon/sets', { next: { revalidate: 3600 } }) // Cache catalog for 1 hour to speed it up!
+          fetch('/api/pokemon/sets', { next: { revalidate: 3600 } })
         ]);
 
         if (!cloudRes.ok || !catalogRes.ok) return;
@@ -44,12 +68,8 @@ export default function HomePage() {
         const ownedIds: string[] = cloudData.masterSets || [];
         const allSets = catalogData.sets || [];
 
-        // If the cloud is empty, but we have local sets, the user probably just cleared their cloud.
-        if (ownedIds.length === 0 && localSets.length === 0) {
-          return;
-        }
+        if (ownedIds.length === 0 && localSets.length === 0) return;
 
-        // Match Cloud IDs with the Catalog to build the fresh list
         const mappedSets: ActiveSet[] = ownedIds.map(id => {
           const found = allSets.find((s: any) => s.id === id)
           if (found) {
@@ -65,9 +85,33 @@ export default function HomePage() {
           return null
         }).filter(Boolean) as ActiveSet[]
 
-        // Update the screen and local backup silently
         setActiveSets(mappedSets);
         saveActiveSets(mappedSets); 
+
+        // Secretly fetch pricing for all sets to keep dashboard total accurate
+        const freshValues: Record<string, { eur: number, dkk: number }> = {}
+        await Promise.all(mappedSets.map(async (set) => {
+          const res = await fetch(`/api/owned-cards?setId=${set.id}`, { cache: 'no-store' })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.cardData) {
+               let eur = 0, dkk = 0;
+               const pricesToSave: Record<string, any> = {}
+               data.cardData.forEach((row: any) => {
+                 if (row.paidPrice != null) {
+                   const numPrice = Number(row.paidPrice)
+                   pricesToSave[row.cardId] = { price: numPrice, currency: row.currency || "EUR" }
+                   if (row.currency === "DKK") dkk += numPrice;
+                   else eur += numPrice;
+                 }
+               })
+               freshValues[set.id] = { eur, dkk }
+               // Update local storage so individual pages are fast too
+               localStorage.setItem(`prices:${set.id}`, JSON.stringify(pricesToSave))
+            }
+          }
+        }))
+        setSetValues(freshValues)
 
       } catch (err) {
         console.error("Background sync failed", err);
@@ -77,7 +121,6 @@ export default function HomePage() {
     syncWithCloud();
   }, [])
 
-  // The Search Function for the API
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -105,24 +148,21 @@ export default function HomePage() {
     }
   }
 
-  // Add the chosen set to the dashboard AND save to Postgres Cloud
   const handleAddSet = async (newSet: ActiveSet) => {
     if (activeSets.some(s => s.id === newSet.id)) {
       toast.info("This set is already on your dashboard!");
       return;
     }
     
-    // Update UI instantly
     const updatedSets = [...activeSets, newSet];
     setActiveSets(updatedSets);
-    saveActiveSets(updatedSets); // Save locally instantly
+    saveActiveSets(updatedSets); 
     
     setIsAddingSet(false);
     setSearchQuery("");
     setSearchResults([]);
     toast.success(`${newSet.name} added to Master Sets!`);
 
-    // Save to Postgres silently in the background
     try {
       await fetch('/api/master-sets', {
         method: 'POST',
@@ -136,14 +176,25 @@ export default function HomePage() {
   }
 
   // Calculate stats for the dashboard
-  const setsWithOwned = activeSets.map((set) => ({
-    ...set,
-    ownedCards: ownedCounts[set.id] ?? 0,
-  }))
+  const setsWithStats = activeSets.map((set) => {
+    const val = setValues[set.id] || { eur: 0, dkk: 0 };
+    const totalVal = displayCurrency === "EUR" 
+        ? val.eur + (val.dkk / EUR_TO_DKK)
+        : val.dkk + (val.eur * EUR_TO_DKK);
 
-  const totalOwned = setsWithOwned.reduce((acc, s) => acc + s.ownedCards, 0)
-  const totalCards = setsWithOwned.reduce((acc, s) => acc + s.totalCards, 0)
+    return {
+        ...set,
+        ownedCards: ownedCounts[set.id] ?? 0,
+        value: totalVal
+    }
+  })
+
+  const totalOwned = setsWithStats.reduce((acc, s) => acc + s.ownedCards, 0)
+  const totalCards = setsWithStats.reduce((acc, s) => acc + s.totalCards, 0)
   const completionPct = totalCards > 0 ? Math.round((totalOwned / totalCards) * 100) : 0
+
+  // Calculate Grand Total Expense
+  const grandTotalValue = setsWithStats.reduce((acc, s) => acc + s.value, 0)
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -153,8 +204,6 @@ export default function HomePage() {
       {isAddingSet && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[80vh]">
-            
-            {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b">
               <h2 className="text-xl font-bold">Add a Master Set</h2>
               <Button variant="ghost" size="icon" onClick={() => setIsAddingSet(false)}>
@@ -162,7 +211,6 @@ export default function HomePage() {
               </Button>
             </div>
             
-            {/* Search Bar */}
             <div className="p-4 border-b bg-muted/30">
               <form onSubmit={handleSearch} className="flex gap-2">
                 <input 
@@ -178,7 +226,6 @@ export default function HomePage() {
               </form>
             </div>
             
-            {/* Search Results List */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
               {searchResults.length === 0 && !isSearching && (
                 <div className="text-center py-10 text-muted-foreground text-sm">
@@ -196,7 +243,6 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-
           </div>
         </div>
       )}
@@ -216,7 +262,8 @@ export default function HomePage() {
         </div>
 
         {/* Stats Overview */}
-        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+        <div className="mb-8 grid gap-4 sm:grid-cols-4">
+          
           <div className="relative rounded-lg border bg-card p-4 overflow-hidden">
             <p className="text-sm text-muted-foreground">Total Sets</p>
             <p className="mt-1 text-2xl font-bold">{activeSets.length}</p>
@@ -237,6 +284,20 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* NEW: Value Block */}
+          <div 
+            className="relative rounded-lg border bg-card p-4 overflow-hidden cursor-pointer group hover:border-primary/50 transition-colors"
+            onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
+            title="Click to toggle currency"
+          >
+            <p className="text-sm text-muted-foreground flex items-center gap-1">
+              Value <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </p>
+            <p className="mt-1 text-2xl font-bold text-primary transition-transform group-active:scale-95">
+              {displayCurrency === "EUR" ? "€" : "kr "}{grandTotalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+
           <div className="relative rounded-lg border bg-card p-4 overflow-hidden">
             <p className="text-sm text-muted-foreground">Completion</p>
             <p className="mt-1 text-2xl font-bold">{completionPct}%</p>
@@ -246,12 +307,19 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+
         </div>
 
         {/* Master Sets Grid */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {setsWithOwned.map((set) => (
-            <MasterSetCard key={set.id} {...set} />
+          {setsWithStats.map((set) => (
+            <MasterSetCard 
+              key={set.id} 
+              {...set} 
+              // We pass the new value and currency to the card component!
+              value={set.value} 
+              displayCurrency={displayCurrency} 
+            />
           ))}
           
           {isLoadingSets && (
@@ -260,7 +328,7 @@ export default function HomePage() {
             </div>
           )}
 
-          {!isLoadingSets && setsWithOwned.length === 0 && (
+          {!isLoadingSets && setsWithStats.length === 0 && (
              <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl border-muted-foreground/20">
                <p className="text-muted-foreground font-medium mb-4">You have no master sets on your dashboard.</p>
                <Button onClick={() => setIsAddingSet(true)}>Add your first set</Button>
