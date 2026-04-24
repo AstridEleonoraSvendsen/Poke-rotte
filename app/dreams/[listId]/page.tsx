@@ -37,9 +37,10 @@ const SORT_LABELS: Record<SortOption, string> = {
   "price-asc":        "Price: Low to High",
 }
 
-export default function DreamsListPage({ params }: { params: Promise<{ listId: string }> }) {
+export default function DreamsListPage({ params }: { params: Promise<any> }) {
   const resolvedParams = use(params)
-  const listId = resolvedParams.listId
+  // This bulletproofs it! It will check for BOTH folder names.
+  const listId = resolvedParams.listId || resolvedParams.id
 
   const [list, setList] = useState<DreamsList | null>(null)
   const [cards, setCards] = useState<DreamsCard[]>([])
