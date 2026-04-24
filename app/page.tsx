@@ -1,5 +1,6 @@
 "use client"
 
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Header } from "@/components/header"
@@ -322,11 +323,12 @@ export default function HomePage() {
             />
           ))}
           
-          {isLoadingSets && (
-            <div className="col-span-full py-20 text-center text-muted-foreground">
-              Loading rat data from the shadows...
-            </div>
-          )}
+         {isLoadingSets && (
+  <div className="col-span-full py-20 flex flex-col items-center justify-center text-muted-foreground">
+    <PokeballSpinner className="h-12 w-12 text-foreground mb-4 shadow-lg" />
+    <p className="font-medium tracking-wide">Loading rat data from the shadows...</p>
+  </div>
+)}
 
           {!isLoadingSets && setsWithStats.length === 0 && (
              <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl border-muted-foreground/20">
