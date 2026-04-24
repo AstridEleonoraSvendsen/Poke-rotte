@@ -39,6 +39,7 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 export default function DreamsListPage({ params }: { params: Promise<{ listId: string }> }) {
   const resolvedParams = use(params)
+  // Safely grab the listId (Now locked to the [listId] folder name you confirmed)
   const listId = resolvedParams.listId
 
   const [list, setList] = useState<DreamsList | null>(null)
@@ -120,7 +121,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
         if (cardRes.ok) {
           const cardData = await cardRes.json()
-          if (cardData.cards) {
+          // Safety check: ensure cards is actually an array
+          if (Array.isArray(cardData.cards)) {
             setCards(cardData.cards)
             saveDreamsCards(listId, cardData.cards)
           }
@@ -237,24 +239,27 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
   const isInList = (cardId: string) => cards.some((c) => c.id === cardId)
 
-  const sortedWishlistCards = [...cards]
+  // SAFE ARRAY: Ensures cards is always mapped securely
+  const safeCards = Array.isArray(cards) ? cards : []
+
+  // SAFE SORTING: Forces properties to be strings so .localeCompare doesn't crash
+  const sortedWishlistCards = [...safeCards]
     .filter(c => filterQuery
-      ? c.name.toLowerCase().includes(filterQuery.toLowerCase()) || c.setName.toLowerCase().includes(filterQuery.toLowerCase())
+      ? String(c.name).toLowerCase().includes(filterQuery.toLowerCase()) || String(c.setName).toLowerCase().includes(filterQuery.toLowerCase())
       : true)
     .sort((a, b) => {
       switch (wishlistSort) {
-        case "name":   return a.name.localeCompare(b.name)
-        case "set":    return a.setName.localeCompare(b.setName)
-        case "rarity": return (a.rarity || "").localeCompare(b.rarity || "")
-        default:       return new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+        case "name":   return String(a.name || "").localeCompare(String(b.name || ""))
+        case "set":    return String(a.setName || "").localeCompare(String(b.setName || ""))
+        case "rarity": return String(a.rarity || "").localeCompare(String(b.rarity || ""))
+        default:       return new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime()
       }
     })
 
-  const totalCards = cards.reduce((a, c) => a + c.quantity, 0)
-  const totalPrice = cards.reduce((a, c) => a + (c.marketPrice ?? 0) * c.quantity, 0)
-  
-  // FIX: Safety check for price mapping!
-  const priceKnownCount = cards.filter(c => c.marketPrice != null).length
+  // SAFE MATH: Forces quantity and marketPrice to be Numbers, handling DB strings
+  const totalCards = safeCards.reduce((a, c) => a + (Number(c.quantity) || 0), 0)
+  const totalPrice = safeCards.reduce((a, c) => a + (Number(c.marketPrice) || 0) * (Number(c.quantity) || 0), 0)
+  const priceKnownCount = safeCards.filter(c => c.marketPrice != null).length
 
   // Loading Screen
   if (!list && isSyncing) {
@@ -348,7 +353,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               <p className="text-xs text-muted-foreground">Cards</p>
             </div>
             <div className="rounded-lg border bg-card px-4 py-2 text-center min-w-[72px]">
-              <p className="text-2xl font-bold">{cards.length}</p>
+              <p className="text-2xl font-bold">{safeCards.length}</p>
               <p className="text-xs text-muted-foreground">Unique</p>
             </div>
             <div className="rounded-lg border bg-card px-4 py-2 text-center min-w-[96px]">
@@ -356,7 +361,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                 €{totalPrice.toFixed(2)}
               </p>
               <p className="text-xs text-muted-foreground">
-                Total raw{priceKnownCount < cards.length ? ` (${priceKnownCount}/${cards.length})` : ""}
+                Total raw{priceKnownCount < safeCards.length ? ` (${priceKnownCount}/${safeCards.length})` : ""}
               </p>
             </div>
           </div>
@@ -448,7 +453,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                 return (
                   <div key={card.id} className="group flex flex-col">
                     <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
-                      {/* FIX: Safe image check! */}
                       {card.images?.small && (
                         <Image src={card.images.small} alt={card.name || "Card"} fill
                           className="object-cover transition-transform duration-200 group-hover:scale-105"
@@ -470,7 +474,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                       <p className="text-[11px] text-muted-foreground truncate">{card.set?.name}</p>
                       <p className="text-[11px] text-muted-foreground">#{card.number}</p>
                       <p className="text-xs font-semibold text-primary mt-auto">
-                        {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                        {/* SAFE FORMATTING */}
+                        {card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}
                       </p>
                     </div>
                   </div>
@@ -498,7 +503,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                       {card.rarity && <span className="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] bg-secondary text-muted-foreground">{card.rarity}</span>}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-primary">{card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}</p>
+                      {/* SAFE FORMATTING */}
+                      <p className="text-sm font-semibold text-primary">{card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}</p>
                       <p className="text-[10px] text-muted-foreground">Raw</p>
                     </div>
                     <button onClick={() => !inList && !justAdded && handleAddCard(card)}
@@ -522,14 +528,14 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
         </div>
 
         {/* ── MY WISHLIST CARDS ─────────────────────────────── */}
-        {cards.length > 0 && (
+        {safeCards.length > 0 && (
           <>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between mb-5">
               <h2 className="text-lg font-bold">Cards in this list</h2>
               <div className="flex items-center gap-2 flex-wrap">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                  <Input placeholder="Filter..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="pl-8 h-8 w-40 text-sm bg-card" />
+                  <Input placeholder="Filter..." value={filterQuery} onChange={e => setFilterQuery(e.target.value)} className="pl-8 h-8 w-40 text-sm bg-card focus:outline-ring" />
                 </div>
                 <span className="text-sm text-muted-foreground">Sort:</span>
                 {(["added", "name", "set", "rarity"] as WishlistSort[]).map(mode => (
@@ -546,7 +552,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               {sortedWishlistCards.map(card => (
                 <div key={card.id} className="group flex flex-col">
                   <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
-                    {/* FIX: Safe image check here too */}
+                    {/* SAFE IMAGE */}
                     {card.imageSmall && (
                       <Image src={card.imageSmall} alt={card.name || "Card"} fill
                         className="object-cover transition-transform duration-200 group-hover:scale-105"
@@ -569,7 +575,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                     <p className="text-[11px] text-muted-foreground truncate">{card.setName}</p>
                     <p className="text-[11px] text-muted-foreground">#{card.number}</p>
                     <p className="text-xs font-semibold text-primary mt-auto">
-                      {card.marketPrice != null ? `€${card.marketPrice.toFixed(2)}` : "—"}
+                      {/* SAFE FORMATTING */}
+                      {card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}
                     </p>
                   </div>
                   <div className="flex items-center gap-1.5 mt-2">
@@ -589,7 +596,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           </>
         )}
 
-        {cards.length === 0 && (
+        {safeCards.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <Heart className="h-8 w-8 text-primary" />
