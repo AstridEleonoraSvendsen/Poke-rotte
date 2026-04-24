@@ -1,5 +1,6 @@
 "use client"
 
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -347,19 +348,19 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const completionPercent =
     cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="flex items-center justify-center py-24">
-          <div className="flex flex-col items-center gap-4">
-            <Spinner className="h-8 w-8" />
-            <p className="text-muted-foreground">Loading rat sets...</p>
-          </div>
+ if (loading) {
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="flex items-center justify-center py-32">
+        <div className="flex flex-col items-center gap-4">
+          <PokeballSpinner className="h-14 w-14 text-foreground shadow-xl drop-shadow-md" />
+          <p className="text-muted-foreground font-medium tracking-wide">Loading rat sets...</p>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}
 
   if (error || !set) {
     return (
