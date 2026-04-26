@@ -6,6 +6,7 @@ import Image from "next/image"
 import { Header } from "@/components/header"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { Search, ChevronRight, X, LayoutGrid, List as ListIcon, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
@@ -177,9 +178,11 @@ export default function DatabasePage() {
         {showSearch && (
           <div className="mb-10">
             {searching && (
-              <div className="flex items-center gap-3 py-6">
-                <Spinner className="h-5 w-5" />
-                <span className="text-muted-foreground text-sm">Searching...</span>
+              <div className="flex items-center justify-center py-12">
+                <div className="flex flex-col items-center gap-3">
+                  <PokeballSpinner className="h-10 w-10 text-foreground shadow-md" />
+                  <span className="text-muted-foreground font-medium tracking-wide text-sm">Searching the database...</span>
+                </div>
               </div>
             )}
 
@@ -339,10 +342,10 @@ export default function DatabasePage() {
         {!showSearch && (
           <>
            {loading && (
-              <div className="flex items-center justify-center py-16">
-                <div className="flex flex-col items-center gap-4">
-                  <Spinner className="h-8 w-8" />
-                  <p className="text-muted-foreground text-sm">Loading rat sets...</p>
+              <div className="flex items-center justify-center py-32">
+                <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                  <PokeballSpinner className="h-14 w-14 text-foreground shadow-xl drop-shadow-md" />
+                  <p className="font-medium tracking-wide">Loading rat sets...</p>
                 </div>
               </div>
             )}
