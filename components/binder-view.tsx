@@ -1,8 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import Image from "next/image"
-import { Heart } from "lucide-react"
+import { Heart, Grid3X3, LayoutGrid } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 interface Card {
   id: string
@@ -25,8 +27,17 @@ interface BinderViewProps {
   onToggleWishlist?: (cardId: string, e: React.MouseEvent) => void
 }
 
+type BinderLayout = 9 | 12
+
 export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggleWishlist }: BinderViewProps) {
-  const CARDS_PER_SIDE = 24
+  // Toggle between 9-pocket and 12-pocket pages
+  const [layout, setLayout] = useState<BinderLayout>(9)
+
+  const CARDS_PER_PAGE = layout
+  const CARDS_PER_SIDE = CARDS_PER_PAGE * 2 // Left + Right page
+
+  // Calculate grid columns based on layout (3x3 for 9-pocket, 3x4 or 4x3 depending on preference, we use 3 columns for both to mimic standard pages but you can adjust)
+  const gridColumnsClass = layout === 9 ? "grid-cols-3" : "grid-cols-3 lg:grid-cols-4"
 
   const sides: Card[][] = []
   for (let i = 0; i < cards.length; i += CARDS_PER_SIDE) {
@@ -35,20 +46,51 @@ export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggl
 
   return (
     <div className="space-y-6">
+      
+      {/* Layout Toggle Controls */}
+      <div className="flex justify-end mb-4">
+        <div className="flex items-center gap-2 rounded-lg border bg-secondary/50 p-1">
+          <button
+            onClick={() => setLayout(9)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+              layout === 9 ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="9-Pocket Page"
+          >
+            <Grid3X3 className="h-4 w-4" />
+            9-Pocket
+          </button>
+          <button
+            onClick={() => setLayout(12)}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
+              layout === 12 ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            title="12-Pocket Page"
+          >
+            <LayoutGrid className="h-4 w-4" />
+            12-Pocket
+          </button>
+        </div>
+      </div>
+
+      {/* Binder Pages */}
       {sides.map((sideCards, sideIndex) => {
-        const leftPage = sideCards.slice(0, 12)
-        const rightPage = sideCards.slice(12, 24)
+        const leftPage = sideCards.slice(0, CARDS_PER_PAGE)
+        const rightPage = sideCards.slice(CARDS_PER_PAGE, CARDS_PER_SIDE)
 
         return (
           <div key={sideIndex} className="rounded-lg border bg-card p-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
               {/* Left Page */}
               <div className="rounded-lg border border-border/50 bg-background/50 p-4">
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-sm font-medium text-primary">Page {sideIndex * 2 + 1}</span>
                   <span className="text-sm text-muted-foreground">{leftPage.length} cards</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className={cn("grid gap-2", gridColumnsClass)}>
                   {leftPage.map((card) => (
                     <BinderCard
                       key={card.id}
@@ -69,7 +111,7 @@ export function BinderView({ cards, ownedCards, wishlist, onToggleOwned, onToggl
                     <span className="text-sm font-medium text-primary">Page {sideIndex * 2 + 2}</span>
                     <span className="text-sm text-muted-foreground">{rightPage.length} cards</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className={cn("grid gap-2", gridColumnsClass)}>
                     {rightPage.map((card) => (
                       <BinderCard
                         key={card.id}
@@ -109,26 +151,37 @@ function BinderCard({ card, owned, wishlisted, onToggle, onToggleWishlist }: Bin
         !owned && "opacity-50 grayscale"
       )}
     >
-      <Image
-        src={card.images.small}
-        alt={card.name}
-        fill
-        className="object-cover"
-        sizes="(max-width: 768px) 30vw, 150px"
-      />
+      {/* Fallback pattern if image is missing */}
+      {card.images?.small ? (
+        <Image
+          src={card.images.small}
+          alt={card.name}
+          fill
+          className="object-cover"
+          sizes="(max-width: 768px) 30vw, 150px"
+        />
+      ) : (
+         <div className="absolute inset-0 flex items-center justify-center border-2 border-dashed border-muted-foreground/30 bg-secondary/20">
+            <span className="text-[10px] text-muted-foreground font-medium">No Image</span>
+         </div>
+      )}
+
       {card.isReverseHolo && (
         <div className="absolute inset-0 bg-gradient-to-br from-transparent via-white/10 to-transparent pointer-events-none" />
       )}
+      
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
         <p className="text-[9px] text-white font-medium truncate">{card.name}</p>
         <p className="text-[8px] text-white/70">#{card.number}</p>
       </div>
+      
       <div className={cn(
         "absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold",
         owned ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
       )}>
         {owned ? "1/1" : "0/1"}
       </div>
+      
       {onToggleWishlist && (
         <button
           onClick={onToggleWishlist}
