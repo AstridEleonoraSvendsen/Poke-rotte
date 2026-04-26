@@ -5,7 +5,6 @@ import { Toaster } from 'sonner'
 import { SiteFooter } from "@/components/site-footer"
 import './globals.css'
 
-
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
@@ -54,7 +53,14 @@ export default function RootLayout({
         }} />
         {/* ------------------------------------ */}
 
-        {children}
+        {/* Wrapper to push footer to the bottom */}
+        <div className="flex min-h-screen flex-col">
+          <main className="flex-1">
+            {children}
+          </main>
+          <SiteFooter />
+        </div>
+
         <Toaster position="top-center" richColors />
         <Analytics />
       </body>
