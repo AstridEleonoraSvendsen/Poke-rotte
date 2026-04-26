@@ -1,12 +1,12 @@
 "use client"
 
-import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { Header } from "@/components/header"
 import { MasterSetCard } from "@/components/master-set-card"
 import { Button } from "@/components/ui/button"
 import { Plus, Search, X, ArrowUpDown } from "lucide-react"
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { getAllOwnedCounts, getActiveSets, saveActiveSets, type ActiveSet } from "@/lib/collection"
 import { toast } from "sonner"
 
@@ -19,7 +19,7 @@ export default function HomePage() {
   const [activeSets, setActiveSets] = useState<ActiveSet[]>([])
   const [isLoadingSets, setIsLoadingSets] = useState(false) 
   
-  // NEW: Global Pricing State
+  // Global Pricing State
   const [setValues, setSetValues] = useState<Record<string, { eur: number, dkk: number }>>({})
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("EUR")
   
@@ -30,7 +30,7 @@ export default function HomePage() {
   const [isSearching, setIsSearching] = useState(false)
 
   useEffect(() => {
-    // 1. INSTANT LOAD: Grab data from local storage so the screen paints immediately
+    // 1. INSTANT LOAD: Grab data from local storage
     setOwnedCounts(getAllOwnedCounts())
     const localSets = getActiveSets()
     setActiveSets(localSets)
@@ -53,7 +53,7 @@ export default function HomePage() {
     })
     setSetValues(calculatedValues)
 
-    // 2. BACKGROUND SYNC: Fetch the cloud data to make sure we are perfectly up to date
+    // 2. BACKGROUND SYNC: Fetch the cloud data and correct the "Master Set Totals"
     async function syncWithCloud() {
       try {
         const [cloudRes, catalogRes] = await Promise.all([
@@ -71,14 +71,19 @@ export default function HomePage() {
 
         if (ownedIds.length === 0 && localSets.length === 0) return;
 
-        const mappedSets: ActiveSet[] = ownedIds.map(id => {
+        let mappedSets: ActiveSet[] = ownedIds.map(id => {
           const found = allSets.find((s: any) => s.id === id)
+          const existingLocal = localSets.find(s => s.id === id)
+          
           if (found) {
             return {
               id: found.id,
               name: found.name,
               series: found.series,
-              totalCards: found.printedTotal || found.total,
+              // Trust our local storage if it already has the bigger "True Master Set" number!
+              totalCards: existingLocal && existingLocal.totalCards > found.total 
+                ? existingLocal.totalCards 
+                : found.total,
               releaseDate: found.releaseDate,
               logoUrl: found.images?.logo
             }
@@ -87,11 +92,13 @@ export default function HomePage() {
         }).filter(Boolean) as ActiveSet[]
 
         setActiveSets(mappedSets);
-        saveActiveSets(mappedSets); 
 
-        // Secretly fetch pricing for all sets to keep dashboard total accurate
+        // Secretly fetch pricing for all sets AND double-check the True Master Set Total
         const freshValues: Record<string, { eur: number, dkk: number }> = {}
+        let updatedTrueTotals = false;
+
         await Promise.all(mappedSets.map(async (set) => {
+          // A. Fetch Prices
           const res = await fetch(`/api/owned-cards?setId=${set.id}`, { cache: 'no-store' })
           if (res.ok) {
             const data = await res.json()
@@ -107,12 +114,30 @@ export default function HomePage() {
                  }
                })
                freshValues[set.id] = { eur, dkk }
-               // Update local storage so individual pages are fast too
                localStorage.setItem(`prices:${set.id}`, JSON.stringify(pricesToSave))
             }
           }
+
+          // B. Fetch True Master Set Total (includes Reverse Holos)
+          try {
+            const setRes = await fetch(`/api/pokemon/sets/${set.id}`);
+            if (setRes.ok) {
+               const setData = await setRes.json();
+               if (setData.cards && setData.cards.length > set.totalCards) {
+                  set.totalCards = setData.cards.length; // Overwrite with True Total!
+                  updatedTrueTotals = true;
+               }
+            }
+          } catch(e) {}
         }))
+
         setSetValues(freshValues)
+        
+        // Save the corrected True Totals!
+        if (updatedTrueTotals) {
+          setActiveSets([...mappedSets]);
+        }
+        saveActiveSets(mappedSets); 
 
       } catch (err) {
         console.error("Background sync failed", err);
@@ -135,7 +160,7 @@ export default function HomePage() {
         id: apiSet.id,
         name: apiSet.name,
         series: apiSet.series,
-        totalCards: apiSet.printedTotal,
+        totalCards: apiSet.total || apiSet.printedTotal, // Use official total for search UI
         releaseDate: apiSet.releaseDate,
         logoUrl: apiSet.images?.logo
       }));
@@ -155,14 +180,30 @@ export default function HomePage() {
       return;
     }
     
-    const updatedSets = [...activeSets, newSet];
-    setActiveSets(updatedSets);
-    saveActiveSets(updatedSets); 
-    
+    // Close modal & show toast so user knows we are calculating reverse holos
     setIsAddingSet(false);
     setSearchQuery("");
     setSearchResults([]);
-    toast.success(`${newSet.name} added to Master Sets!`);
+    toast.info(`Calculating True Master Set size for ${newSet.name}...`);
+
+    let finalTotalCards = newSet.totalCards;
+    
+    // Fetch the TRUE Master Set total immediately
+    try {
+       const res = await fetch(`/api/pokemon/sets/${newSet.id}`);
+       if (res.ok) {
+          const data = await res.json();
+          if (data.cards) finalTotalCards = data.cards.length;
+       }
+    } catch(e) {}
+
+    const setWithTrueTotal = { ...newSet, totalCards: finalTotalCards };
+    
+    const updatedSets = [...activeSets, setWithTrueTotal];
+    setActiveSets(updatedSets);
+    saveActiveSets(updatedSets); 
+    
+    toast.success(`${newSet.name} added with ${finalTotalCards} cards!`);
 
     try {
       await fetch('/api/master-sets', {
@@ -176,7 +217,7 @@ export default function HomePage() {
     }
   }
 
-  // Calculate stats for the dashboard
+  // Calculate stats for the dashboard using True Totals
   const setsWithStats = activeSets.map((set) => {
     const val = setValues[set.id] || { eur: 0, dkk: 0 };
     const totalVal = displayCurrency === "EUR" 
@@ -194,7 +235,6 @@ export default function HomePage() {
   const totalCards = setsWithStats.reduce((acc, s) => acc + s.totalCards, 0)
   const completionPct = totalCards > 0 ? Math.round((totalOwned / totalCards) * 100) : 0
 
-  // Calculate Grand Total Expense
   const grandTotalValue = setsWithStats.reduce((acc, s) => acc + s.value, 0)
 
   return (
@@ -238,7 +278,7 @@ export default function HomePage() {
                 <div key={set.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
                   <div>
                     <p className="font-bold text-sm">{set.name}</p>
-                    <p className="text-xs text-muted-foreground">{set.series} • {set.totalCards} Cards</p>
+                    <p className="text-xs text-muted-foreground">{set.series} • {set.totalCards} Official Cards</p>
                   </div>
                   <Button size="sm" onClick={() => handleAddSet(set)}>Add</Button>
                 </div>
@@ -285,7 +325,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* NEW: Value Block */}
+          {/* Value Block */}
           <div 
             className="relative rounded-lg border bg-card p-4 overflow-hidden cursor-pointer group hover:border-primary/50 transition-colors"
             onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
@@ -317,18 +357,17 @@ export default function HomePage() {
             <MasterSetCard 
               key={set.id} 
               {...set} 
-              // We pass the new value and currency to the card component!
               value={set.value} 
               displayCurrency={displayCurrency} 
             />
           ))}
           
-         {isLoadingSets && (
-  <div className="col-span-full py-20 flex flex-col items-center justify-center text-muted-foreground">
-    <PokeballSpinner className="h-12 w-12 text-foreground mb-4 shadow-lg" />
-    <p className="font-medium tracking-wide">Loading rat data from the shadows...</p>
-  </div>
-)}
+          {isLoadingSets && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center text-muted-foreground">
+               <PokeballSpinner className="h-12 w-12 text-foreground mb-4 shadow-lg" />
+               <p className="font-medium tracking-wide">Loading rat data from the shadows...</p>
+             </div>
+          )}
 
           {!isLoadingSets && setsWithStats.length === 0 && (
              <div className="col-span-full py-20 text-center border-2 border-dashed rounded-xl border-muted-foreground/20">
