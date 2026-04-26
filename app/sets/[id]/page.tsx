@@ -469,7 +469,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           Back to My Sets
         </Link>
 
-        {/* Set Header - REVERTED TO ORIGINAL LAYOUT */}
+        {/* Set Header - RESTORED BASE CARDS STAT */}
         <div className="mb-6 rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center gap-6">
             <div className="flex items-center gap-4">
@@ -508,12 +508,24 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 <p className="text-xs text-muted-foreground">Complete</p>
               </div>
 
-              <div className="text-center">
+              {/* RESTORED: Master Set Total */}
+              <div className="text-center" title="Master Set Total (Including Reverse Holos)">
                 <p className="text-2xl font-bold">
                   <span className="text-foreground">{ownedCards.size}</span>
                   <span className="text-muted-foreground">/{cards.length}</span>
                 </p>
-                <p className="text-xs text-muted-foreground">Total</p>
+                <p className="text-xs text-muted-foreground">Master Total</p>
+              </div>
+
+              {/* RESTORED: Base Cards (Official Printed Set Number) */}
+              <div className="text-center" title="Base Set Cards">
+                <p className="text-2xl font-bold">
+                  <span className="text-foreground">
+                    {cards.filter((c) => !c.isReverseHolo && ownedCards.has(c.id)).length}
+                  </span>
+                  <span className="text-muted-foreground">/{stats?.regularCards || set.printedTotal || 0}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">Base Cards</p>
               </div>
               
               {wishlist.size > 0 && (
@@ -601,7 +613,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 </button>
               </div>
               
-              {/* NEW: The Total Pages Needed stat, placed exactly where requested */}
+              {/* Total Pages Needed - Rendered conditionally when in binder view */}
               {viewMode === "binder" && (
                 <div className="text-sm font-medium text-muted-foreground border-l border-border pl-4">
                   Needs <span className="text-foreground">{totalPagesNeeded}</span> binder pages
@@ -717,7 +729,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             ownedCards={ownedCards}
             wishlist={wishlist}
             layout={binderLayout} 
-            setLayout={setBinderLayout} // Let BinderView update the layout state so the "Pages needed" updates
+            setLayout={setBinderLayout}
             onToggleOwned={toggleOwned}
             onToggleWishlist={(id, e) => toggleWishlist(id, e)}
           />
