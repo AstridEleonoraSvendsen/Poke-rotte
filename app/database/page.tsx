@@ -48,7 +48,6 @@ function formatDate(d: string) {
   catch { return d }
 }
 
-// ── Sort Options ──
 type SortOption = "newest" | "oldest" | "price-desc" | "price-asc" | "alpha-asc"
 
 const sortLabels: Record<SortOption, string> = {
@@ -70,10 +69,14 @@ export default function DatabasePage() {
   const [setResults, setSetResults] = useState<PokemonSet[]>([])
   const [searching, setSearching] = useState(false)
   const [searched, setSearched] = useState(false)
+  
+  // NEW: Pagination States
+  const [searchPage, setSearchPage] = useState(1)
+  const [searchHasMore, setSearchHasMore] = useState(false)
+  
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const allSets = useRef<PokemonSet[]>([])
 
-  // New Layout & Filter States
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [sortBy, setSortBy] = useState<SortOption>("newest")
 
@@ -91,26 +94,43 @@ export default function DatabasePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Execute Search
+  // Execute Search (Reusable function to handle initial search AND loading more)
+  const runSearch = async (q: string, pageToLoad: number, append = false) => {
+    if (q.trim().length < 2) {
+      setCardResults([]); setSetResults([]); setSearched(false); setSearchHasMore(false); return
+    }
+    
+    setSearching(true); setSearched(true)
+    
+    // Only search sets on page 1
+    if (pageToLoad === 1) {
+      const lowerQ = q.toLowerCase()
+      setSetResults(allSets.current.filter(s => s.name.toLowerCase().includes(lowerQ)).slice(0, 6))
+    }
+    
+    try {
+      const res = await fetch(`/api/pokemon/search?q=${encodeURIComponent(q.trim())}&sort=releaseDate-desc&page=${pageToLoad}`)
+      const data = await res.json()
+      
+      // Append if loading more, otherwise replace
+      setCardResults(prev => append ? [...prev, ...(data.cards ?? [])] : (data.cards ?? []))
+      setSearchPage(pageToLoad)
+      setSearchHasMore(data.hasMore ?? false)
+    } catch { 
+      if (!append) setCardResults([]) 
+    }
+    finally { setSearching(false) }
+  }
+
+  // Debounced input watcher
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    if (query.trim().length < 2) {
-      setCardResults([]); setSetResults([]); setSearched(false); return
-    }
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true); setSearched(true)
-      
-      const q = query.toLowerCase()
-      setSetResults(allSets.current.filter(s => s.name.toLowerCase().includes(q)).slice(0, 6))
-      
-      try {
-        const res = await fetch(`/api/pokemon/search?q=${encodeURIComponent(query.trim())}&sort=releaseDate-desc&page=1`)
-        const data = await res.json()
-        setCardResults(data.cards ?? [])
-      } catch { setCardResults([]) }
-      finally { setSearching(false) }
-    }, 400)
+    debounceRef.current = setTimeout(() => runSearch(query, 1, false), 400)
   }, [query])
+
+  const loadMore = () => {
+    runSearch(query, searchPage + 1, true)
+  }
 
   const sortedSeries = Object.keys(sets).sort((a, b) => {
     const ai = SERIES_ORDER.indexOf(a), bi = SERIES_ORDER.indexOf(b)
@@ -119,7 +139,7 @@ export default function DatabasePage() {
     return ai - bi
   })
 
-  // ── Apply Sorting to Cards ──
+  // Apply Sorting to Cards locally
   const sortedCardResults = useMemo(() => {
     return [...cardResults].sort((a, b) => {
       switch (sortBy) {
@@ -167,7 +187,7 @@ export default function DatabasePage() {
             className="pl-11 h-12 text-base bg-card"
           />
           {query && (
-            <button onClick={() => { setQuery(""); setCardResults([]); setSetResults([]); setSearched(false) }}
+            <button onClick={() => { setQuery(""); setCardResults([]); setSetResults([]); setSearched(false); setSearchHasMore(false) }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
               <X className="h-4 w-4" />
             </button>
@@ -177,7 +197,7 @@ export default function DatabasePage() {
         {/* ── SEARCH RESULTS ── */}
         {showSearch && (
           <div className="mb-10">
-            {searching && (
+            {searching && cardResults.length === 0 && (
               <div className="flex items-center justify-center py-12">
                 <div className="flex flex-col items-center gap-3">
                   <PokeballSpinner className="h-10 w-10 text-foreground shadow-md" />
@@ -186,7 +206,7 @@ export default function DatabasePage() {
               </div>
             )}
 
-            {!searching && searched && (
+            {searched && (
               <>
                 {/* Matching sets */}
                 {setResults.length > 0 && (
@@ -219,7 +239,7 @@ export default function DatabasePage() {
                     {/* Toolbar: Title, View Toggles, and Sort Dropdown */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 border-b pb-4">
                       <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                        Cards — {cardResults.length} found
+                        Cards — {cardResults.length} loaded
                       </h2>
                       
                       <div className="flex items-center gap-3">
@@ -268,7 +288,6 @@ export default function DatabasePage() {
 
                     {/* Card Display Area */}
                     {viewMode === "grid" ? (
-                      /* Grid View Layout (Updated with Names) */
                       <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                         {sortedCardResults.map(card => (
                           <Link key={card.id} href={`/database/${card.set.id}`}
@@ -302,7 +321,6 @@ export default function DatabasePage() {
                         ))}
                       </div>
                     ) : (
-                      /* List View Layout */
                       <div className="flex flex-col gap-2">
                         {sortedCardResults.map(card => (
                           <Link key={card.id} href={`/database/${card.set.id}`}
@@ -327,10 +345,25 @@ export default function DatabasePage() {
                         ))}
                       </div>
                     )}
+
+                    {/* NEW: Load More Button */}
+                    {searchHasMore && (
+                      <div className="mt-8 flex justify-center">
+                        <Button 
+                          variant="outline" 
+                          size="lg" 
+                          onClick={loadMore} 
+                          disabled={searching}
+                          className="min-w-[200px]"
+                        >
+                          {searching ? "Loading..." : "Load More Cards"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {setResults.length === 0 && cardResults.length === 0 && (
+                {setResults.length === 0 && cardResults.length === 0 && !searching && (
                   <div className="py-10 text-center text-muted-foreground">No results for "{query}"</div>
                 )}
               </>
