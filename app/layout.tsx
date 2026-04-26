@@ -12,6 +12,11 @@ export const metadata: Metadata = {
   title: 'Pokemon Rats - Our Personal Tracker',
   description: 'Track your Pokemon card collection, only for rats',
   generator: 'v0.app',
+  // NEW: This tells Google and other search engines to go away!
+  robots: {
+    index: false,
+    follow: false,
+  },
   icons: {
     icon: [
       {
