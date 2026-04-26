@@ -59,9 +59,9 @@ export function Header() {
 
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <span className="text-sm font-bold text-primary-foreground">RC</span>
+              <span className="text-sm font-bold text-primary-foreground">MA</span>
             </div>
-            <span className="text-lg font-bold tracking-tight">Rat Collectors</span>
+            <span className="text-lg font-bold tracking-tight">Pokemon Rats</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
