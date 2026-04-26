@@ -8,8 +8,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'PokeCollect - Pokemon Card Collection Tracker',
-  description: 'Track your Pokemon card collection, create master sets, and browse the complete card database',
+  title: 'Pokemon Rats - Our Personal Tracker',
+  description: 'Track your Pokemon card collection, only for rats',
   generator: 'v0.app',
   icons: {
     icon: [
