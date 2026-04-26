@@ -1,6 +1,5 @@
 "use client"
 
-import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -10,7 +9,7 @@ import { RarityBreakdown } from "@/components/rarity-breakdown"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
-import { Spinner } from "@/components/ui/spinner"
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { ArrowLeft, Search, Trash2, ArrowUpDown, Heart, AlertTriangle, Coins, X, Check } from "lucide-react"
 import { loadOwnedCards, saveOwnedCards, loadWishlist, saveWishlist } from "@/lib/collection"
 import {
@@ -23,6 +22,7 @@ import { cn } from "@/lib/utils"
 
 type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 type Currency = "EUR" | "DKK"
+type BinderLayout = 9 | 12 // NEW: Controls the entire page's math!
 
 interface PokemonCard {
   id: string
@@ -87,6 +87,9 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [saveIndicator, setSaveIndicator] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false) 
+
+  // NEW: Binder Layout State (Hoisted to calculate top header math)
+  const [binderLayout, setBinderLayout] = useState<BinderLayout>(9)
 
   useEffect(() => {
     // 1. Instant Local Load
@@ -167,7 +170,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
         })
       } else {
         next.delete(cardId)
-        // Optionally remove price if un-owned
         const newPrices = { ...cardPrices }
         delete newPrices[cardId]
         setCardPrices(newPrices)
@@ -192,7 +194,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   }
 
   const openPriceModal = (cardId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevents clicking the card behind it
+    e.stopPropagation(); 
     e.preventDefault();
     setSelectedCardId(cardId);
     if (cardPrices[cardId]) {
@@ -266,7 +268,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     })
   }
 
-  // --- SMART CONVERTER MATH ---
   let totalEUR = 0;
   let totalDKK = 0;
   
@@ -345,22 +346,22 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
       }
     })
 
-  const completionPercent =
-    cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
+  const completionPercent = cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
+  const totalPagesNeeded = Math.ceil(cards.length / binderLayout)
 
- if (loading) {
-  return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <div className="flex items-center justify-center py-32">
-        <div className="flex flex-col items-center gap-4">
-          <PokeballSpinner className="h-14 w-14 text-foreground shadow-xl drop-shadow-md" />
-          <p className="text-muted-foreground font-medium tracking-wide">Loading rat sets...</p>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-32">
+          <div className="flex flex-col items-center gap-4">
+            <PokeballSpinner className="h-14 w-14 text-foreground shadow-xl drop-shadow-md" />
+            <p className="text-muted-foreground font-medium tracking-wide">Loading rat sets...</p>
+          </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
 
   if (error || !set) {
     return (
@@ -380,7 +381,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* PRICE MODAL - Clean overlay, z-index high enough so it doesn't crash underneath */}
+      {/* PRICE MODAL */}
       {priceModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-xs mx-4 p-6" onClick={e => e.stopPropagation()}>
@@ -489,7 +490,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
 
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
               
-              {/* SMART TOTAL BLOCK */}
+              {/* SMART CONVERTER BLOCK */}
               <div 
                 className="text-center cursor-pointer hover:bg-secondary/40 p-2 rounded-lg transition-colors group"
                 onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
@@ -508,6 +509,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 <p className="text-2xl font-bold text-foreground">{completionPercent}%</p>
                 <p className="text-xs text-muted-foreground">Complete</p>
               </div>
+
               <div className="text-center">
                 <p className="text-2xl font-bold">
                   <span className="text-foreground">{ownedCards.size}</span>
@@ -515,14 +517,19 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 </p>
                 <p className="text-xs text-muted-foreground">Total</p>
               </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold">
-                  <span className="text-foreground">
-                    {cards.filter((c) => !c.isReverseHolo && ownedCards.has(c.id)).length}
-                  </span>
-                  <span className="text-muted-foreground">/{stats?.regularCards || 0}</span>
+
+              {/* NEW SMART PAGES BLOCK */}
+              <div 
+                className="text-center cursor-pointer hover:bg-secondary/40 p-2 rounded-lg transition-colors group"
+                onClick={() => setBinderLayout(prev => prev === 9 ? 12 : 9)}
+                title="Click to toggle 9-Pocket / 12-Pocket math"
+              >
+                <p className="text-2xl font-bold text-foreground transition-transform group-active:scale-95">
+                  {totalPagesNeeded}
                 </p>
-                <p className="text-xs text-muted-foreground">Cards</p>
+                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                  {binderLayout}-Pocket Pages <ArrowUpDown className="h-3 w-3 opacity-50 group-hover:opacity-100" />
+                </p>
               </div>
               
               {wishlist.size > 0 && (
@@ -541,7 +548,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 >
                   Saved ✓
                 </span>
-                
                 <Button variant="ghost" size="icon" title="Delete this master set" onClick={() => setConfirmDelete(true)}>
                   <Trash2 className="h-5 w-5" />
                 </Button>
@@ -637,8 +643,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           <div className="grid gap-x-3 gap-y-5 grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
             {filteredAndSortedCards.map((card) => (
               <div key={card.id} className="group flex flex-col">
-                
-                {/* 1. The Clickable Card Area */}
                 <div
                   onClick={() => toggleOwned(card.id)}
                   role="button"
@@ -690,7 +694,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   </button>
                 </div>
                 
-                {/* 2. The Info Section (Name, Number, and Coin Button) */}
                 <div className="mt-2 flex items-start justify-between gap-1">
                   <div className="flex flex-col gap-px overflow-hidden min-w-0">
                     <p className="text-[10px] font-semibold leading-tight truncate">
@@ -701,7 +704,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                     </p>
                   </div>
                   
-                  {/* The newly moved Coin Button - completely separated from the card click! */}
                   {ownedCards.has(card.id) && (
                     <button
                       onClick={(e) => openPriceModal(card.id, e)}
@@ -715,7 +717,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                     </button>
                   )}
                 </div>
-
               </div>
             ))}
           </div>
@@ -724,6 +725,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             cards={filteredAndSortedCards}
             ownedCards={ownedCards}
             wishlist={wishlist}
+            layout={binderLayout} // Passes the layout math down to the visualizer!
             onToggleOwned={toggleOwned}
             onToggleWishlist={(id, e) => toggleWishlist(id, e)}
           />
