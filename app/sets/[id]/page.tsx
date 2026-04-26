@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 
 type SortOption = "number-asc" | "number-desc" | "alpha" | "owned" | "missing"
 type Currency = "EUR" | "DKK"
-type BinderLayout = 9 | 12 // NEW: Controls the entire page's math!
+type BinderLayout = 9 | 12
 
 interface PokemonCard {
   id: string
@@ -88,7 +88,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false) 
 
-  // NEW: Binder Layout State (Hoisted to calculate top header math)
   const [binderLayout, setBinderLayout] = useState<BinderLayout>(9)
 
   useEffect(() => {
@@ -347,7 +346,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
     })
 
   const completionPercent = cards.length > 0 ? Math.round((ownedCards.size / cards.length) * 100) : 0
-  const totalPagesNeeded = Math.ceil(cards.length / binderLayout)
+  const totalPagesNeeded = Math.ceil(filteredAndSortedCards.length / binderLayout)
 
   if (loading) {
     return (
@@ -470,7 +469,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           Back to My Sets
         </Link>
 
-        {/* Set Header */}
+        {/* Set Header - REVERTED TO ORIGINAL LAYOUT */}
         <div className="mb-6 rounded-lg border bg-card p-6 shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center gap-6">
             <div className="flex items-center gap-4">
@@ -490,7 +489,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
 
             <div className="flex flex-wrap items-center gap-6 lg:ml-auto">
               
-              {/* SMART CONVERTER BLOCK */}
               <div 
                 className="text-center cursor-pointer hover:bg-secondary/40 p-2 rounded-lg transition-colors group"
                 onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
@@ -501,7 +499,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   {totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-                  Total Expense <ArrowUpDown className="h-3 w-3 opacity-50 group-hover:opacity-100" />
+                  Value <ArrowUpDown className="h-3 w-3 opacity-50 group-hover:opacity-100" />
                 </p>
               </div>
 
@@ -516,20 +514,6 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   <span className="text-muted-foreground">/{cards.length}</span>
                 </p>
                 <p className="text-xs text-muted-foreground">Total</p>
-              </div>
-
-              {/* NEW SMART PAGES BLOCK */}
-              <div 
-                className="text-center cursor-pointer hover:bg-secondary/40 p-2 rounded-lg transition-colors group"
-                onClick={() => setBinderLayout(prev => prev === 9 ? 12 : 9)}
-                title="Click to toggle 9-Pocket / 12-Pocket math"
-              >
-                <p className="text-2xl font-bold text-foreground transition-transform group-active:scale-95">
-                  {totalPagesNeeded}
-                </p>
-                <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-                  {binderLayout}-Pocket Pages <ArrowUpDown className="h-3 w-3 opacity-50 group-hover:opacity-100" />
-                </p>
               </div>
               
               {wishlist.size > 0 && (
@@ -595,7 +579,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <div className="flex rounded-lg border bg-secondary/50 p-1">
                 <button
                   onClick={() => setViewMode("grid")}
@@ -616,7 +600,16 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                   Binder
                 </button>
               </div>
+              
+              {/* NEW: The Total Pages Needed stat, placed exactly where requested */}
+              {viewMode === "binder" && (
+                <div className="text-sm font-medium text-muted-foreground border-l border-border pl-4">
+                  Needs <span className="text-foreground">{totalPagesNeeded}</span> binder pages
+                </div>
+              )}
+            </div>
 
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowWishlistOnly((v) => !v)}
                 className={cn(
@@ -629,9 +622,7 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
                 <Heart className={cn("h-3.5 w-3.5", showWishlistOnly && "fill-pink-500")} />
                 Wishlist {wishlist.size > 0 && `(${wishlist.size})`}
               </button>
-            </div>
-
-            <div className="flex items-center gap-2">
+              <div className="h-6 w-px bg-border mx-1"></div>
               <Button variant="ghost" size="sm" onClick={selectAll}>Select all</Button>
               <Button variant="ghost" size="sm" onClick={clearAll}>Clear all</Button>
             </div>
@@ -725,7 +716,8 @@ export default function SetDetailPage({ params }: { params: Promise<{ id: string
             cards={filteredAndSortedCards}
             ownedCards={ownedCards}
             wishlist={wishlist}
-            layout={binderLayout} // Passes the layout math down to the visualizer!
+            layout={binderLayout} 
+            setLayout={setBinderLayout} // Let BinderView update the layout state so the "Pages needed" updates
             onToggleOwned={toggleOwned}
             onToggleWishlist={(id, e) => toggleWishlist(id, e)}
           />
