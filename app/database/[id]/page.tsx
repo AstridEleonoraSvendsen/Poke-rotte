@@ -135,7 +135,7 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-4">
             <Spinner className="h-8 w-8" />
-            <p className="text-muted-foreground">Loading set data...</p>
+            <p className="text-muted-foreground">Loading rat data...</p>
           </div>
         </div>
       </div>
