@@ -17,12 +17,13 @@ import {
   type DreamsList,
   type DreamsCard,
 } from "@/lib/collection"
-import { Plus, Sparkles, Heart, Trash2, ChevronRight, Search, X } from "lucide-react"
+import { Plus, Sparkles, Heart, Trash2, X, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function DreamsPage() {
   const [lists, setLists] = useState<DreamsList[]>([])
-  const [cardCounts, setCardCounts] = useState<Record<string, { count: number; previews: DreamsCard[] }>>({})
+  // Updated state to include 'cards' so we can check for alerts
+  const [cardCounts, setCardCounts] = useState<Record<string, { count: number; previews: DreamsCard[]; cards: DreamsCard[] }>>({})
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
@@ -33,10 +34,10 @@ export default function DreamsPage() {
     const localLists = getDreamsLists()
     setLists(localLists)
     
-    const counts: Record<string, { count: number; previews: DreamsCard[] }> = {}
+    const counts: Record<string, { count: number; previews: DreamsCard[]; cards: DreamsCard[] }> = {}
     localLists.forEach((list) => {
       const cards = getDreamsCards(list.id)
-      counts[list.id] = { count: cards.reduce((a, c) => a + c.quantity, 0), previews: cards.slice(0, 5) }
+      counts[list.id] = { count: cards.reduce((a, c) => a + c.quantity, 0), previews: cards.slice(0, 5), cards }
     })
     setCardCounts(counts)
 
@@ -62,7 +63,7 @@ export default function DreamsPage() {
           });
 
           // Sync card counts for all lists
-          const cloudCounts: Record<string, { count: number; previews: DreamsCard[] }> = {}
+          const cloudCounts: Record<string, { count: number; previews: DreamsCard[]; cards: DreamsCard[] }> = {}
           await Promise.all(cloudLists.map(async (list) => {
             const cardRes = await fetch(`/api/dreams-cards?listId=${list.id}`, { cache: 'no-store' })
             if (cardRes.ok) {
@@ -71,7 +72,8 @@ export default function DreamsPage() {
               saveDreamsCards(list.id, cards)
               cloudCounts[list.id] = { 
                 count: cards.reduce((a, c) => a + c.quantity, 0), 
-                previews: cards.slice(0, 5) 
+                previews: cards.slice(0, 5),
+                cards
               }
             }
           }))
@@ -90,7 +92,7 @@ export default function DreamsPage() {
     if (!newName.trim()) return
     const created = createDreamsList(newName, newDesc)
     setLists((prev) => [created, ...prev])
-    setCardCounts((prev) => ({ ...prev, [created.id]: { count: 0, previews: [] } }))
+    setCardCounts((prev) => ({ ...prev, [created.id]: { count: 0, previews: [], cards: [] } }))
     setNewName("")
     setNewDesc("")
     setShowCreate(false)
@@ -136,7 +138,7 @@ export default function DreamsPage() {
               {lists.length === 0 ? "Create a wishlist to start." : `${lists.length} lists · ${totalCards} cards`}
             </p>
           </div>
-          <Button onClick={() => setShowCreate(true)} className="gap-2">
+          <Button onClick={() => setShowCreate(true)} className="gap-2 bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">
             <Plus className="h-4 w-4" /> New Wishlist
           </Button>
         </div>
@@ -151,7 +153,7 @@ export default function DreamsPage() {
               <Input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} />
               <Input placeholder="Description" value={newDesc} onChange={e => setNewDesc(e.target.value)} />
               <div className="flex gap-2">
-                <Button onClick={handleCreate} disabled={!newName.trim()}>Create</Button>
+                <Button onClick={handleCreate} disabled={!newName.trim()} className="bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">Create</Button>
                 <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
               </div>
             </div>
@@ -160,10 +162,25 @@ export default function DreamsPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {lists.map((list) => {
-            const info = cardCounts[list.id] ?? { count: 0, previews: [] }
+            const info = cardCounts[list.id] ?? { count: 0, previews: [], cards: [] }
+            
+            // NEW: Check if any card in this list has a triggered alert
+            // (Assumes you've added targetPrice and marketPrice to your DreamsCard type/data)
+            const hasActiveAlert = info.cards.some((c: any) => 
+                c.targetPrice !== null && c.marketPrice !== null && c.marketPrice <= c.targetPrice
+            );
+
             return (
               <Link key={list.id} href={`/dreams/${list.id}`} className="group block">
-                <div className="relative rounded-xl border bg-card overflow-hidden transition-all hover:border-primary/50 hover:shadow-lg">
+                <div className="relative rounded-xl border bg-card overflow-hidden transition-all hover:border-[#4f5f4f]/50 hover:shadow-lg">
+                  
+                  {/* NEW: Deal Alert Badge on the Folder */}
+                  {hasActiveAlert && (
+                    <div className="absolute top-2 left-2 z-10 bg-red-500 text-white rounded-full px-2.5 py-1 flex items-center gap-1 text-[10px] font-bold shadow-md animate-bounce border border-red-600">
+                      <AlertCircle className="h-3 w-3" /> DEAL ALERT!
+                    </div>
+                  )}
+
                   <div className="h-28 bg-secondary/30 relative flex items-center justify-center gap-1">
                     {info.previews.length === 0 ? <Heart className="h-8 w-8 opacity-20" /> : 
                       info.previews.map((card, i) => (
@@ -172,7 +189,7 @@ export default function DreamsPage() {
                         </div>
                       ))
                     }
-                    <button onClick={(e) => handleDelete(list.id, e)} className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 opacity-0 group-hover:opacity-100"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <button onClick={(e) => handleDelete(list.id, e)} className="absolute top-2 right-2 p-1.5 rounded-md bg-background/80 text-destructive opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive hover:text-white"><Trash2 className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="p-4">
                     <h3 className="font-bold truncate">{list.name}</h3>
