@@ -98,3 +98,10 @@
     @apply bg-background text-foreground;
   }
 }
+/* --- FUN CURSOR TOGGLE RULES --- */
+html.fun-cursor, html.fun-cursor * { 
+  cursor: url('/pokeball-normal.png') 16 16, auto !important; 
+}
+html.fun-cursor a, html.fun-cursor button, html.fun-cursor [role="button"], html.fun-cursor input, html.fun-cursor select, html.fun-cursor textarea, html.fun-cursor .cursor-pointer, html.fun-cursor a *, html.fun-cursor button * { 
+  cursor: url('/pokeball-hover.png') 16 16, pointer !important; 
+}
