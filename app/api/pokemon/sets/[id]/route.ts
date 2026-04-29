@@ -9,6 +9,20 @@ const NO_REVERSE_HOLO_RARITIES = new Set([
   "Trainer Gallery Rare Holo",
 ])
 
+// NEW: History lesson to prevent fake reverse holos in old sets!
+function setSupportsReverseHolos(series?: string, setName?: string) {
+  if (!series || !setName) return true;
+  // Vintage eras did not have reverse holos
+  if (series === "Gym" || series === "Neo" || series === "e-Card") {
+     // Expedition, Aquapolis, and Skyridge (e-Card series) DO have reverse holos.
+     // But strictly speaking, Gym and Neo do not.
+     if (series === "Gym" || series === "Neo") return false;
+  }
+  // The "Base" series didn't have them, EXCEPT for Legendary Collection!
+  if (series === "Base" && setName !== "Legendary Collection") return false;
+  return true;
+}
+
 function apiHeaders(): HeadersInit {
   const h: HeadersInit = { "Content-Type": "application/json" }
   if (process.env.POKEMON_TCG_API_KEY) h["X-Api-Key"] = process.env.POKEMON_TCG_API_KEY
@@ -58,8 +72,12 @@ export async function GET(
     // ── 4. Build master set (standard + reverse holos) ───────────────────────
     const printedTotal = set.printedTotal || 0
     const masterCards: any[] = []
+    
+    // NEW: Determine if this specific set gets reverse holos
+    const supportsReverses = setSupportsReverseHolos(set.series, set.name);
 
     for (const card of allCards) {
+      // Always add the standard version
       masterCards.push({
         id: card.id, name: card.name, number: card.number,
         rarity: card.rarity || "Unknown", variant: "standard",
@@ -67,7 +85,9 @@ export async function GET(
       })
 
       const num = parseInt(card.number.replace(/\D/g, "")) || 0
-      if (num <= printedTotal && !NO_REVERSE_HOLO_RARITIES.has(card.rarity)) {
+      
+      // NEW: We now require supportsReverses to be true before cloning!
+      if (supportsReverses && num <= printedTotal && !NO_REVERSE_HOLO_RARITIES.has(card.rarity)) {
         masterCards.push({
           id: `${card.id}-reverse`,
           name: `${card.name} Reverse Holo`,
