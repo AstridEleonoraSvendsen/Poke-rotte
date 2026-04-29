@@ -141,14 +141,15 @@ export default function PortfolioPage() {
     debounceRef.current = setTimeout(() => runSearch(searchQuery), 500)
   }, [searchQuery])
 
-  // Improved Price Fetcher with TCGPlayer Fallback
+ // Improved Price Fetcher with TCGPlayer Fallback
   const getMarketPrice = (apiCard: any) => {
     if (apiCard.cardmarket?.prices?.trendPrice) return apiCard.cardmarket.prices.trendPrice;
     if (apiCard.cardmarket?.prices?.averageSellPrice) return apiCard.cardmarket.prices.averageSellPrice;
     
     if (apiCard.tcgplayer?.prices) {
       const p = apiCard.tcgplayer.prices;
-      const fallback = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p.1stEditionHolofoil?.market;
+      // Fixed syntax error: used bracket notation for '1stEditionHolofoil'
+      const fallback = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p['1stEditionHolofoil']?.market;
       if (fallback) return fallback;
     }
     return 0;
