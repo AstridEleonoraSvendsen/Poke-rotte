@@ -17,7 +17,7 @@ type AcquiredMethod = "pulled" | "purchased"
 
 // --- DATA MODELS ---
 interface PortfolioCard {
-  uniqueId: string // Unique ID so you can add duplicates of the same card
+  uniqueId: string 
   cardId: string
   name: string
   number: string
@@ -58,14 +58,12 @@ export default function PortfolioPage() {
 
   // --- INITIAL LOAD ---
   useEffect(() => {
-    // 1. Load from Local Storage instantly
     const localData = localStorage.getItem("ratPortfolios")
     if (localData) {
       setPortfolios(JSON.parse(localData))
     }
     setLoading(false)
 
-    // 2. Background Cloud Sync (Graceful fail if API doesn't exist yet)
     async function syncCloud() {
       try {
         const res = await fetch('/api/portfolios')
@@ -83,11 +81,9 @@ export default function PortfolioPage() {
     syncCloud()
   }, [])
 
-  // Save helper
   const savePortfolios = (newPortfolios: Portfolio[]) => {
     setPortfolios(newPortfolios)
     localStorage.setItem("ratPortfolios", JSON.stringify(newPortfolios))
-    // Background cloud save
     fetch('/api/portfolios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -145,6 +141,19 @@ export default function PortfolioPage() {
     debounceRef.current = setTimeout(() => runSearch(searchQuery), 500)
   }, [searchQuery])
 
+  // Improved Price Fetcher with TCGPlayer Fallback
+  const getMarketPrice = (apiCard: any) => {
+    if (apiCard.cardmarket?.prices?.trendPrice) return apiCard.cardmarket.prices.trendPrice;
+    if (apiCard.cardmarket?.prices?.averageSellPrice) return apiCard.cardmarket.prices.averageSellPrice;
+    
+    if (apiCard.tcgplayer?.prices) {
+      const p = apiCard.tcgplayer.prices;
+      const fallback = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p.1stEditionHolofoil?.market;
+      if (fallback) return fallback;
+    }
+    return 0;
+  }
+
   const handleAddCard = (apiCard: any) => {
     if (!activePortfolioId) return
 
@@ -153,14 +162,14 @@ export default function PortfolioPage() {
       cardId: apiCard.id,
       name: apiCard.name,
       number: apiCard.number,
-      rarity: apiCard.rarity || "Unknown",
+      rarity: apiCard.rarity || "Unknown Rarity",
       setId: apiCard.set.id,
       setName: apiCard.set.name,
       images: { small: apiCard.images?.small || "" },
-      marketPrice: apiCard.cardmarket?.prices?.trendPrice || apiCard.cardmarket?.prices?.averageSellPrice || null,
+      marketPrice: getMarketPrice(apiCard),
       paidPrice: null,
       currency: "EUR",
-      acquiredMethod: "pulled", // Default to pulled!
+      acquiredMethod: "pulled", 
     }
 
     const updated = portfolios.map(p => 
@@ -205,9 +214,8 @@ export default function PortfolioPage() {
   const activePortfolio = portfolios.find(p => p.id === activePortfolioId)
 
   const calculateCardValue = (card: PortfolioCard, targetCurrency: Currency) => {
-    // If they manually inputted a paid price, use that. Otherwise, use market price.
     let baseValue = card.paidPrice !== null ? card.paidPrice : (card.marketPrice || 0)
-    let baseCurrency = card.paidPrice !== null ? card.currency : "EUR" // Market is always EUR
+    let baseCurrency = card.paidPrice !== null ? card.currency : "EUR"
 
     if (baseCurrency === targetCurrency) return baseValue
     if (baseCurrency === "EUR" && targetCurrency === "DKK") return baseValue * EUR_TO_DKK
@@ -252,7 +260,7 @@ export default function PortfolioPage() {
                 onChange={e => setNewPortfolioName(e.target.value)} 
                 autoFocus
               />
-              <Button type="submit" className="w-full">Create</Button>
+              <Button type="submit" className="w-full bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">Create</Button>
             </form>
           </div>
         </div>
@@ -280,7 +288,7 @@ export default function PortfolioPage() {
             </div>
             <div className="flex-1 overflow-y-auto p-4">
               {isSearching ? (
-                <div className="flex justify-center py-10"><PokeballSpinner className="h-8 w-8" /></div>
+                <div className="flex justify-center py-10"><PokeballSpinner className="h-8 w-8 text-[#4f5f4f]" /></div>
               ) : searchResults.length > 0 ? (
                 <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 md:grid-cols-5">
                   {searchResults.map(card => (
@@ -288,7 +296,7 @@ export default function PortfolioPage() {
                       <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden border">
                         <Image src={card.images?.small || ""} alt={card.name} fill className="object-cover" />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                          <Button size="sm" onClick={() => handleAddCard(card)}>Add</Button>
+                          <Button size="sm" className="bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white" onClick={() => handleAddCard(card)}>Add</Button>
                         </div>
                       </div>
                       <p className="text-[10px] font-bold truncate leading-none">{card.name}</p>
@@ -318,13 +326,13 @@ export default function PortfolioPage() {
                 <div>
                   <h2 className="text-base font-bold leading-tight">{editingCard.name}</h2>
                   <p className="text-xs text-muted-foreground">{editingCard.setName}</p>
+                  <p className="text-[10px] text-muted-foreground">{editingCard.rarity}</p>
                 </div>
               </div>
               <button onClick={() => setEditingCard(null)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
 
             <form onSubmit={handleSaveCardEdit} className="space-y-6">
-              {/* RIPPED VS PURCHASED */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">How did you get it?</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -355,7 +363,6 @@ export default function PortfolioPage() {
                 </div>
               </div>
 
-              {/* PAID PRICE (Only really needed if purchased, but we allow it for both) */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-muted-foreground tracking-wider flex justify-between">
                   <span>Custom Value / Paid Price</span>
@@ -388,7 +395,7 @@ export default function PortfolioPage() {
                 <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => {handleRemoveCard(editingCard.uniqueId); setEditingCard(null)}}>
                   <Trash2 className="h-4 w-4 mr-2" /> Remove
                 </Button>
-                <Button type="submit">Save Changes</Button>
+                <Button type="submit" className="bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">Save Changes</Button>
               </div>
             </form>
           </div>
@@ -399,7 +406,6 @@ export default function PortfolioPage() {
       {/* --- MAIN PAGE CONTENT --- */}
       <main className="container mx-auto px-4 py-8 max-w-6xl">
         
-        {/* GLOBAL HEADER & CURRENCY TOGGLE */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">My Portfolios</h1>
@@ -411,7 +417,7 @@ export default function PortfolioPage() {
             onClick={() => setDisplayCurrency(prev => prev === "EUR" ? "DKK" : "EUR")}
             title="Toggle Currency"
           >
-            <Coins className="h-4 w-4 text-primary" />
+            <Coins className="h-4 w-4 text-[#4f5f4f]" />
             <span className="text-sm font-bold text-foreground">
               {displayCurrency === "EUR" ? "EUR (€)" : "DKK (kr)"}
             </span>
@@ -424,13 +430,13 @@ export default function PortfolioPage() {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold">Your Collections</h2>
-              <Button onClick={() => setIsCreating(true)} className="gap-2"><Plus className="h-4 w-4"/> New Portfolio</Button>
+              <Button onClick={() => setIsCreating(true)} className="gap-2 bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white"><Plus className="h-4 w-4"/> New Portfolio</Button>
             </div>
 
             {portfolios.length === 0 ? (
               <div className="text-center py-24 border-2 border-dashed rounded-xl bg-secondary/10">
                 <p className="text-muted-foreground font-medium mb-4">You haven't created any portfolios yet.</p>
-                <Button onClick={() => setIsCreating(true)} variant="outline">Create your first Portfolio</Button>
+                <Button onClick={() => setIsCreating(true)} variant="outline" className="border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10">Create your first Portfolio</Button>
               </div>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
@@ -440,7 +446,7 @@ export default function PortfolioPage() {
                     <div 
                       key={port.id} 
                       onClick={() => setActivePortfolioId(port.id)}
-                      className="group flex flex-col p-5 rounded-xl border bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer relative"
+                      className="group flex flex-col p-5 rounded-xl border bg-card hover:border-[#4f5f4f]/50 hover:shadow-md transition-all cursor-pointer relative"
                     >
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeletePortfolio(port.id); }}
@@ -452,7 +458,7 @@ export default function PortfolioPage() {
                       <p className="text-xs text-muted-foreground mb-4">{port.cards.length} Cards</p>
                       <div className="mt-auto pt-4 border-t">
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Value</p>
-                        <p className="text-xl font-bold text-primary">
+                        <p className="text-xl font-bold text-[#4f5f4f]">
                           {displayCurrency === "EUR" ? "€" : "kr "}
                           {totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
@@ -483,19 +489,19 @@ export default function PortfolioPage() {
               <div className="flex items-center gap-6">
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Portfolio Value</p>
-                  <p className="text-3xl font-bold text-primary">
+                  <p className="text-3xl font-bold text-[#4f5f4f]">
                     {displayCurrency === "EUR" ? "€" : "kr "}
                     {calculateTotalValue(activePortfolio.cards).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
-                <Button onClick={() => setIsAddingCard(true)} className="gap-2 h-12 px-6"><Plus className="h-5 w-5"/> Add Card</Button>
+                <Button onClick={() => setIsAddingCard(true)} className="gap-2 h-12 px-6 bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white"><Plus className="h-5 w-5"/> Add Card</Button>
               </div>
             </div>
 
             {activePortfolio.cards.length === 0 ? (
               <div className="text-center py-24 border-2 border-dashed rounded-xl bg-secondary/10">
                 <p className="text-muted-foreground font-medium mb-4">This portfolio is empty.</p>
-                <Button onClick={() => setIsAddingCard(true)} variant="outline">Search & Add Cards</Button>
+                <Button onClick={() => setIsAddingCard(true)} variant="outline" className="border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10">Search & Add Cards</Button>
               </div>
             ) : (
               <div className="grid gap-x-4 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -506,14 +512,12 @@ export default function PortfolioPage() {
                       <div className="relative aspect-[2.5/3.5] rounded-xl overflow-hidden shadow-sm border bg-secondary/20">
                         <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="(max-width: 640px) 45vw, 20vw" />
                         
-                        {/* EDIT BUTTON OVERLAY */}
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                          <Button variant="secondary" size="sm" className="gap-2" onClick={() => setEditingCard(card)}>
+                          <Button variant="secondary" size="sm" className="gap-2 text-[#4f5f4f]" onClick={() => setEditingCard(card)}>
                             <Edit className="h-4 w-4" /> Edit Details
                           </Button>
                         </div>
 
-                        {/* RIPPED / PURCHASED BADGE */}
                         <div className="absolute bottom-2 left-2 z-10">
                           {card.acquiredMethod === "pulled" ? (
                             <span className="bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-sm border border-red-600">
@@ -529,9 +533,10 @@ export default function PortfolioPage() {
                       
                       <div className="mt-3 flex flex-col px-1">
                         <p className="text-[13px] font-bold truncate leading-tight">{card.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate mb-1">{card.setName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate leading-none mt-1">{card.setName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate leading-none mt-1 mb-2">{card.rarity}</p>
                         <div className="flex items-center justify-between mt-auto">
-                          <p className="text-sm font-bold text-primary">
+                          <p className="text-sm font-bold text-[#4f5f4f]">
                             {displayCurrency === "EUR" ? "€" : "kr "}
                             {cardVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
