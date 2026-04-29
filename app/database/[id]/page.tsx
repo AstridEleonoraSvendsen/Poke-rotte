@@ -8,9 +8,10 @@ import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
+import { PokeballSpinner } from "@/components/ui/pokeball-spinner" // <--- THE MISSING IMPORT IS ADDED HERE!
 import { ArrowLeft, Search, Plus, Grid3X3, List, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { toast } from "sonner" // Ensure sonner is installed
+import { toast } from "sonner" 
 
 interface PokemonCard {
   id: string
@@ -110,8 +111,6 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
       if (res.ok) {
         setIsMasterSet(true)
         toast.success(`${set?.name || "Set"} added to Master Sets!`)
-        // Optionally redirect immediately:
-        // router.push(`/sets/${resolvedParams.id}`)
       } else {
         toast.error("Failed to add to master sets")
       }
@@ -128,7 +127,7 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
     card.number.includes(searchQuery)
   )
 
-if (loading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
