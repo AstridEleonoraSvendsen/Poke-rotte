@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Header } from "@/components/header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
-import { Plus, Search, X, ArrowLeft, Coins, ArrowUpDown, Trash2, Edit } from "lucide-react"
+import { Spinner } from "@/components/ui/spinner"
+import { Plus, Search, X, ArrowLeft, Coins, ArrowUpDown, Trash2, Edit, RefreshCw, TrendingUp, TrendingDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
@@ -31,11 +32,114 @@ interface PortfolioCard {
   acquiredMethod: AcquiredMethod
 }
 
+interface ValueSnapshot {
+  date: number
+  valueEur: number
+}
+
 interface Portfolio {
   id: string
   name: string
   createdAt: number
   cards: PortfolioCard[]
+  history: ValueSnapshot[] // NEW: Array to track value over time!
+}
+
+// --- CUSTOM SVG STOCK CHART COMPONENT ---
+function PortfolioChart({ history, displayCurrency }: { history: ValueSnapshot[], displayCurrency: Currency }) {
+  if (!history || history.length === 0) return null;
+
+  const width = 800;
+  const height = 160;
+  const padding = 20;
+
+  // Convert history values to the currently selected currency
+  const data = history.map(h => ({
+    date: h.date,
+    value: displayCurrency === "EUR" ? h.valueEur : h.valueEur * EUR_TO_DKK
+  }));
+
+  // If we only have 1 data point (because they just started tracking), mock a flat line
+  const chartData = data.length === 1 
+    ? [{ date: data[0].date - 86400000, value: data[0].value }, data[0]] 
+    : data;
+
+  const minVal = Math.min(...chartData.map(d => d.value));
+  const maxVal = Math.max(...chartData.map(d => d.value));
+  const minDate = chartData[0].date;
+  const maxDate = chartData[chartData.length - 1].date;
+
+  const rangeVal = maxVal - minVal === 0 ? 1 : maxVal - minVal;
+  const rangeDate = maxDate - minDate === 0 ? 1 : maxDate - minDate;
+
+  // Calculate coordinates
+  const points = chartData.map((d, i) => {
+    const x = padding + ((d.date - minDate) / rangeDate) * (width - padding * 2);
+    const y = height - padding - ((d.value - minVal) / rangeVal) * (height - padding * 2);
+    return `${x},${y}`;
+  }).join(" ");
+
+  // Determine trend color
+  const isUp = chartData[chartData.length - 1].value >= chartData[0].value;
+  const strokeColor = isUp ? "#22c55e" : "#ef4444"; // Green if up, Red if down
+  const gradientId = isUp ? "gradUp" : "gradDown";
+
+  // Calculate percentage change
+  const startVal = chartData[0].value;
+  const currentVal = chartData[chartData.length - 1].value;
+  const pctChange = startVal === 0 ? 0 : ((currentVal - startVal) / startVal) * 100;
+
+  return (
+    <div className="w-full bg-card border rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row gap-6 items-center">
+      <div className="flex-shrink-0 text-center sm:text-left min-w-[120px]">
+        <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-1">All Time Return</p>
+        <div className={cn("flex items-center justify-center sm:justify-start gap-1 text-2xl font-bold", isUp ? "text-green-500" : "text-red-500")}>
+          {isUp ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+          {isUp ? "+" : ""}{pctChange.toFixed(2)}%
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">Since {new Date(minDate).toLocaleDateString()}</p>
+      </div>
+
+      <div className="flex-1 w-full relative h-[160px]">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="gradUp" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#22c55e" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="gradDown" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.2" />
+              <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          
+          {/* Fill Area */}
+          <polygon 
+            points={`${padding},${height - padding} ${points} ${width - padding},${height - padding}`}
+            fill={`url(#${gradientId})`}
+          />
+          {/* Line */}
+          <polyline 
+            fill="none" 
+            stroke={strokeColor} 
+            strokeWidth="3" 
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            points={points} 
+            className="drop-shadow-sm"
+          />
+          {/* Current Dot */}
+          <circle 
+            cx={padding + ((chartData[chartData.length - 1].date - minDate) / rangeDate) * (width - padding * 2)} 
+            cy={height - padding - ((chartData[chartData.length - 1].value - minVal) / rangeVal) * (height - padding * 2)} 
+            r="5" 
+            fill={strokeColor} 
+            className="animate-pulse"
+          />
+        </svg>
+      </div>
+    </div>
+  );
 }
 
 export default function PortfolioPage() {
@@ -44,7 +148,6 @@ export default function PortfolioPage() {
   const [loading, setLoading] = useState(true)
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("EUR")
 
-  // Modals & States
   const [isCreating, setIsCreating] = useState(false)
   const [newPortfolioName, setNewPortfolioName] = useState("")
   
@@ -55,12 +158,18 @@ export default function PortfolioPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [editingCard, setEditingCard] = useState<PortfolioCard | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   // --- INITIAL LOAD ---
   useEffect(() => {
     const localData = localStorage.getItem("ratPortfolios")
     if (localData) {
-      setPortfolios(JSON.parse(localData))
+      // Ensure existing portfolios are upgraded to have a history array
+      const parsed: Portfolio[] = JSON.parse(localData).map((p: any) => ({
+        ...p,
+        history: p.history || []
+      }))
+      setPortfolios(parsed)
     }
     setLoading(false)
 
@@ -70,8 +179,9 @@ export default function PortfolioPage() {
         if (res.ok) {
           const cloudData = await res.json()
           if (cloudData && cloudData.length > 0) {
-            setPortfolios(cloudData)
-            localStorage.setItem("ratPortfolios", JSON.stringify(cloudData))
+            const parsed = cloudData.map((p: any) => ({ ...p, history: p.history || [] }))
+            setPortfolios(parsed)
+            localStorage.setItem("ratPortfolios", JSON.stringify(parsed))
           }
         }
       } catch (e) {
@@ -91,7 +201,6 @@ export default function PortfolioPage() {
     }).catch(() => {})
   }
 
-  // --- PORTFOLIO ACTIONS ---
   const handleCreatePortfolio = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newPortfolioName.trim()) return
@@ -100,7 +209,8 @@ export default function PortfolioPage() {
       id: `port_${Date.now()}`,
       name: newPortfolioName.trim(),
       createdAt: Date.now(),
-      cards: []
+      cards: [],
+      history: []
     }
     
     savePortfolios([...portfolios, newPort])
@@ -116,7 +226,6 @@ export default function PortfolioPage() {
     toast.success("Portfolio deleted.")
   }
 
-  // --- CARD SEARCH ACTIONS ---
   const runSearch = async (query: string) => {
     if (query.length < 3) {
       setSearchResults([]); setIsSearching(false); return
@@ -141,18 +250,30 @@ export default function PortfolioPage() {
     debounceRef.current = setTimeout(() => runSearch(searchQuery), 500)
   }, [searchQuery])
 
- // Improved Price Fetcher with TCGPlayer Fallback
   const getMarketPrice = (apiCard: any) => {
     if (apiCard.cardmarket?.prices?.trendPrice) return apiCard.cardmarket.prices.trendPrice;
     if (apiCard.cardmarket?.prices?.averageSellPrice) return apiCard.cardmarket.prices.averageSellPrice;
     
     if (apiCard.tcgplayer?.prices) {
       const p = apiCard.tcgplayer.prices;
-      // Fixed syntax error: used bracket notation for '1stEditionHolofoil'
       const fallback = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p['1stEditionHolofoil']?.market;
       if (fallback) return fallback;
     }
     return 0;
+  }
+
+  const calculateCardValue = (card: PortfolioCard, targetCurrency: Currency) => {
+    let baseValue = card.paidPrice !== null ? card.paidPrice : (card.marketPrice || 0)
+    let baseCurrency = card.paidPrice !== null ? card.currency : "EUR"
+
+    if (baseCurrency === targetCurrency) return baseValue
+    if (baseCurrency === "EUR" && targetCurrency === "DKK") return baseValue * EUR_TO_DKK
+    if (baseCurrency === "DKK" && targetCurrency === "EUR") return baseValue / EUR_TO_DKK
+    return baseValue
+  }
+
+  const calculateTotalValue = (cards: PortfolioCard[], targetCurrency: Currency = "EUR") => {
+    return cards.reduce((sum, card) => sum + calculateCardValue(card, targetCurrency), 0)
   }
 
   const handleAddCard = (apiCard: any) => {
@@ -173,9 +294,15 @@ export default function PortfolioPage() {
       acquiredMethod: "pulled", 
     }
 
-    const updated = portfolios.map(p => 
-      p.id === activePortfolioId ? { ...p, cards: [...p.cards, newCard] } : p
-    )
+    const updated = portfolios.map(p => {
+      if (p.id !== activePortfolioId) return p;
+      const updatedCards = [...p.cards, newCard];
+      // When adding a card, update the history snapshot for today
+      const newTotalEur = calculateTotalValue(updatedCards, "EUR");
+      const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
+      return { ...p, cards: updatedCards, history: newHistory };
+    })
+
     savePortfolios(updated)
     toast.success(`${newCard.name} added to portfolio!`)
     setIsAddingCard(false)
@@ -183,17 +310,17 @@ export default function PortfolioPage() {
     setSearchResults([])
   }
 
-  // --- CARD EDIT ACTIONS ---
   const handleSaveCardEdit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingCard || !activePortfolioId) return
 
     const updated = portfolios.map(p => {
       if (p.id !== activePortfolioId) return p
-      return {
-        ...p,
-        cards: p.cards.map(c => c.uniqueId === editingCard.uniqueId ? editingCard : c)
-      }
+      const updatedCards = p.cards.map(c => c.uniqueId === editingCard.uniqueId ? editingCard : c);
+      // Update history snapshot for today
+      const newTotalEur = calculateTotalValue(updatedCards, "EUR");
+      const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
+      return { ...p, cards: updatedCards, history: newHistory }
     })
     
     savePortfolios(updated)
@@ -205,28 +332,78 @@ export default function PortfolioPage() {
     if (!activePortfolioId) return
     const updated = portfolios.map(p => {
       if (p.id !== activePortfolioId) return p
-      return { ...p, cards: p.cards.filter(c => c.uniqueId !== uniqueId) }
+      const updatedCards = p.cards.filter(c => c.uniqueId !== uniqueId);
+      const newTotalEur = calculateTotalValue(updatedCards, "EUR");
+      const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
+      return { ...p, cards: updatedCards, history: newHistory }
     })
     savePortfolios(updated)
     toast.info("Card removed.")
   }
 
-  // --- MATH & RENDER LOGIC ---
+  // --- BACKGROUND SYNC / DYNAMIC PRICE UPDATER ---
+  const syncMarketPrices = async () => {
+    if (!activePortfolioId) return;
+    const p = portfolios.find(p => p.id === activePortfolioId);
+    if (!p || p.cards.length === 0) {
+      toast.info("Add some cards first!");
+      return;
+    }
+
+    setIsSyncing(true);
+    toast.info("Fetching live market prices...");
+
+    try {
+      // Create a batch search query: q=id:card1 OR id:card2 OR id:card3
+      const cardIds = Array.from(new Set(p.cards.map(c => c.cardId)));
+      const queryParts = cardIds.map(id => `id:${id}`);
+      
+      // The API has a limit to query length, so we batch them if > 40 unique cards
+      let allFreshCards: any[] = [];
+      const batchSize = 40;
+      for (let i = 0; i < queryParts.length; i += batchSize) {
+        const batchQuery = queryParts.slice(i, i + batchSize).join(" OR ");
+        const res = await fetch(`https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(batchQuery)}`, {
+          headers: process.env.NEXT_PUBLIC_POKEMON_TCG_API_KEY ? { "X-Api-Key": process.env.NEXT_PUBLIC_POKEMON_TCG_API_KEY } : {}
+        });
+        const data = await res.json();
+        if (data.data) allFreshCards = allFreshCards.concat(data.data);
+      }
+
+      // Create a lookup map for instant price access
+      const freshPriceMap: Record<string, number> = {};
+      allFreshCards.forEach(apiCard => {
+        freshPriceMap[apiCard.id] = getMarketPrice(apiCard);
+      });
+
+      // Update the portfolio cards with the fresh prices
+      const updatedCards = p.cards.map(card => {
+        const freshPrice = freshPriceMap[card.cardId];
+        if (freshPrice !== undefined) {
+          return { ...card, marketPrice: freshPrice };
+        }
+        return card;
+      });
+
+      // Log a new snapshot!
+      const newTotalEur = calculateTotalValue(updatedCards, "EUR");
+      const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
+
+      const updatedPortfolios = portfolios.map(port => 
+        port.id === activePortfolioId ? { ...port, cards: updatedCards, history: newHistory } : port
+      );
+
+      savePortfolios(updatedPortfolios);
+      toast.success("Market prices updated successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to sync prices. Try again later.");
+    } finally {
+      setIsSyncing(false);
+    }
+  }
+
   const activePortfolio = portfolios.find(p => p.id === activePortfolioId)
-
-  const calculateCardValue = (card: PortfolioCard, targetCurrency: Currency) => {
-    let baseValue = card.paidPrice !== null ? card.paidPrice : (card.marketPrice || 0)
-    let baseCurrency = card.paidPrice !== null ? card.currency : "EUR"
-
-    if (baseCurrency === targetCurrency) return baseValue
-    if (baseCurrency === "EUR" && targetCurrency === "DKK") return baseValue * EUR_TO_DKK
-    if (baseCurrency === "DKK" && targetCurrency === "EUR") return baseValue / EUR_TO_DKK
-    return baseValue
-  }
-
-  const calculateTotalValue = (cards: PortfolioCard[]) => {
-    return cards.reduce((sum, card) => sum + calculateCardValue(card, displayCurrency), 0)
-  }
 
   if (loading) {
     return (
@@ -246,7 +423,6 @@ export default function PortfolioPage() {
     <div className="min-h-screen bg-background relative">
       <Header />
 
-      {/* --- MODAL: CREATE PORTFOLIO --- */}
       {isCreating && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -267,7 +443,6 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* --- MODAL: ADD CARD SEARCH --- */}
       {isAddingCard && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border rounded-xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[85vh]">
@@ -315,7 +490,6 @@ export default function PortfolioPage() {
         </div>
       )}
 
-      {/* --- MODAL: EDIT CARD --- */}
       {editingCard && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-sm p-6">
@@ -404,7 +578,6 @@ export default function PortfolioPage() {
       )}
 
 
-      {/* --- MAIN PAGE CONTENT --- */}
       <main className="container mx-auto px-4 py-8 max-w-6xl">
         
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -426,7 +599,6 @@ export default function PortfolioPage() {
           </div>
         </div>
 
-        {/* VIEW 1: PORTFOLIO LIST */}
         {!activePortfolioId && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -442,7 +614,7 @@ export default function PortfolioPage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {portfolios.map(port => {
-                  const totalVal = calculateTotalValue(port.cards)
+                  const totalVal = calculateTotalValue(port.cards, displayCurrency)
                   return (
                     <div 
                       key={port.id} 
@@ -472,7 +644,6 @@ export default function PortfolioPage() {
           </div>
         )}
 
-        {/* VIEW 2: ACTIVE PORTFOLIO DETAIL */}
         {activePortfolioId && activePortfolio && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <button 
@@ -487,25 +658,43 @@ export default function PortfolioPage() {
                 <h2 className="text-3xl font-bold">{activePortfolio.name}</h2>
                 <p className="text-sm text-muted-foreground mt-1">{activePortfolio.cards.length} Cards in collection</p>
               </div>
-              <div className="flex items-center gap-6">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Portfolio Value</p>
                   <p className="text-3xl font-bold text-[#4f5f4f]">
                     {displayCurrency === "EUR" ? "€" : "kr "}
-                    {calculateTotalValue(activePortfolio.cards).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {calculateTotalValue(activePortfolio.cards, displayCurrency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
-                <Button onClick={() => setIsAddingCard(true)} className="gap-2 h-12 px-6 bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white"><Plus className="h-5 w-5"/> Add Card</Button>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <Button 
+                    onClick={syncMarketPrices} 
+                    variant="outline" 
+                    className="gap-2 flex-1 sm:flex-none border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10"
+                    disabled={isSyncing}
+                  >
+                    {isSyncing ? <Spinner className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+                    Sync Market
+                  </Button>
+                  <Button onClick={() => setIsAddingCard(true)} className="gap-2 flex-1 sm:flex-none bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">
+                    <Plus className="h-5 w-5"/> Add Card
+                  </Button>
+                </div>
               </div>
             </div>
 
+            {/* --- THE STOCK CHART --- */}
+            {activePortfolio.cards.length > 0 && (
+              <PortfolioChart history={activePortfolio.history} displayCurrency={displayCurrency} />
+            )}
+
             {activePortfolio.cards.length === 0 ? (
-              <div className="text-center py-24 border-2 border-dashed rounded-xl bg-secondary/10">
+              <div className="text-center py-24 border-2 border-dashed rounded-xl bg-secondary/10 mt-6">
                 <p className="text-muted-foreground font-medium mb-4">This portfolio is empty.</p>
                 <Button onClick={() => setIsAddingCard(true)} variant="outline" className="border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10">Search & Add Cards</Button>
               </div>
             ) : (
-              <div className="grid gap-x-4 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+              <div className="grid gap-x-4 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 mt-6">
                 {activePortfolio.cards.map(card => {
                   const cardVal = calculateCardValue(card, displayCurrency)
                   return (
