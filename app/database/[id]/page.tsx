@@ -128,14 +128,14 @@ export default function DatabaseSetPage({ params }: { params: Promise<{ id: stri
     card.number.includes(searchQuery)
   )
 
-  if (loading) {
+if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Header />
-        <div className="flex items-center justify-center py-24">
+        <div className="flex items-center justify-center py-32">
           <div className="flex flex-col items-center gap-4">
-            <Spinner className="h-8 w-8" />
-            <p className="text-muted-foreground">Loading rat data...</p>
+            <PokeballSpinner className="h-14 w-14 text-foreground shadow-xl drop-shadow-md" />
+            <p className="text-muted-foreground font-medium tracking-wide">Loading rat data from the shadows...</p>
           </div>
         </div>
       </div>
