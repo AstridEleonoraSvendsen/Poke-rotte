@@ -14,7 +14,7 @@ import {
 } from "@/lib/collection"
 import {
   ArrowLeft, Search, Plus, Minus, X, Heart, Sparkles,
-  Pencil, Check, LayoutGrid, List, ChevronDown, SlidersHorizontal,
+  Pencil, Check, LayoutGrid, List, ChevronDown, SlidersHorizontal, AlertCircle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -39,17 +39,14 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 export default function DreamsListPage({ params }: { params: Promise<{ listId: string }> }) {
   const resolvedParams = use(params)
-  // Safely grab the listId (Now locked to the [listId] folder name you confirmed)
   const listId = resolvedParams.listId
 
   const [list, setList] = useState<DreamsList | null>(null)
   const [cards, setCards] = useState<DreamsCard[]>([])
   
-  // Cloud Sync States
   const [isSyncing, setIsSyncing] = useState(true)
   const [hasCheckedCloud, setHasCheckedCloud] = useState(false)
 
-  // Search
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<SearchCard[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -61,27 +58,22 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [hasSearched, setHasSearched] = useState(false)
 
-  // Wishlist display
   const [filterQuery, setFilterQuery] = useState("")
   const [wishlistSort, setWishlistSort] = useState<WishlistSort>("added")
 
-  // Edit modal
   const [editOpen, setEditOpen] = useState(false)
   const [editName, setEditName] = useState("")
   const [editDesc, setEditDesc] = useState("")
 
-  // Feedback
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sortRef = useRef<HTMLDivElement>(null)
 
-  // --- THE MERGE PROTECTION SYNC ---
   useEffect(() => {
     async function syncData() {
       setIsSyncing(true)
       
-      // 1. Instantly load local data
       const localLists = getDreamsLists()
       const localFound = localLists.find((l) => l.id === listId)
       if (localFound) { 
@@ -91,7 +83,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
         setCards(getDreamsCards(listId))
       }
 
-      // 2. Fetch the Cloud Truth
       try {
         const [listRes, cardRes] = await Promise.all([
           fetch('/api/dreams-lists', { cache: 'no-store' }),
@@ -102,7 +93,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           const listData = await listRes.json()
           const cloudLists: DreamsList[] = listData.lists || []
           
-          // MERGE: Do not let the cloud delete local lists that haven't saved yet!
           const merged = [...cloudLists]
           localLists.forEach(localItem => {
             if (!merged.find(cloudItem => cloudItem.id === localItem.id)) {
@@ -121,7 +111,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
         if (cardRes.ok) {
           const cardData = await cardRes.json()
-          // Safety check: ensure cards is actually an array
           if (Array.isArray(cardData.cards)) {
             setCards(cardData.cards)
             saveDreamsCards(listId, cardData.cards)
@@ -172,16 +161,15 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
       id: card.id, name: card.name, number: card.number, rarity: card.rarity,
       supertype: card.supertype, setName: card.set.name, setId: card.set.id,
       imageSmall: card.images.small, imageLarge: card.images.large,
-      marketPrice: card.marketPrice ?? undefined, listId: listId, quantity: 1
+      marketPrice: card.marketPrice ?? undefined, listId: listId, quantity: 1,
+      targetPrice: null // Initialize with no target price
     }
     
-    // Update local immediately
     addCardToDreamsList(listId, newCardInfo)
     setCards(getDreamsCards(listId))
     setAddedFeedback(card.id)
     setTimeout(() => setAddedFeedback(null), 1500)
     
-    // Background cloud save
     try {
       await fetch('/api/dreams-cards', {
         method: 'POST',
@@ -221,6 +209,31 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
     } catch (e) { console.error("Failed to update quantity in cloud", e) }
   }
 
+  // --- NEW: Update Target Price Logic ---
+  const handleUpdateTargetPrice = async (cardId: string, targetVal: string) => {
+    const card = cards.find((c) => c.id === cardId);
+    if (!card) return;
+
+    // Parse the float, if empty or invalid, set to null
+    const parsedTarget = targetVal === "" ? null : parseFloat(targetVal);
+    
+    // 1. We need a helper to save this specific update to localStorage.
+    // For now, since `lib/collection` doesn't have an `updateDreamsCardTarget` function exposed, 
+    // we will update state and rewrite the whole card list to localStorage
+    const updatedCards = cards.map(c => c.id === cardId ? { ...c, targetPrice: parsedTarget } : c);
+    setCards(updatedCards);
+    saveDreamsCards(listId, updatedCards);
+
+    // 2. Sync to cloud
+    try {
+        await fetch('/api/dreams-cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...card, listId, targetPrice: parsedTarget })
+        })
+    } catch(e) { console.error("Failed to update target price", e)}
+  }
+
   const saveEdit = async () => {
     if (!editName.trim() || !list) return
     
@@ -239,10 +252,8 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
 
   const isInList = (cardId: string) => cards.some((c) => c.id === cardId)
 
-  // SAFE ARRAY: Ensures cards is always mapped securely
   const safeCards = Array.isArray(cards) ? cards : []
 
-  // SAFE SORTING: Forces properties to be strings so .localeCompare doesn't crash
   const sortedWishlistCards = [...safeCards]
     .filter(c => filterQuery
       ? String(c.name).toLowerCase().includes(filterQuery.toLowerCase()) || String(c.setName).toLowerCase().includes(filterQuery.toLowerCase())
@@ -256,12 +267,10 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
       }
     })
 
-  // SAFE MATH: Forces quantity and marketPrice to be Numbers, handling DB strings
   const totalCards = safeCards.reduce((a, c) => a + (Number(c.quantity) || 0), 0)
   const totalPrice = safeCards.reduce((a, c) => a + (Number(c.marketPrice) || 0) * (Number(c.quantity) || 0), 0)
   const priceKnownCount = safeCards.filter(c => c.marketPrice != null).length
 
-  // Loading Screen
   if (!list && isSyncing) {
     return (
       <div className="min-h-screen bg-background">
@@ -274,7 +283,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
     )
   }
 
-  // Not Found Screen
   if (!list && hasCheckedCloud) {
     return (
       <div className="min-h-screen bg-background">
@@ -291,7 +299,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Edit modal */}
       {editOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-card border rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
@@ -328,7 +335,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           <ArrowLeft className="h-4 w-4" /> Back to Poke Dreams
         </Link>
 
-        {/* Page header */}
         <div className="mb-8 flex flex-col sm:flex-row sm:items-start gap-4 justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -367,7 +373,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           </div>
         </div>
 
-        {/* ── SEARCH SECTION ─────────────────────────────────── */}
         <div className="mb-10 rounded-xl border bg-card p-5">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Find a card to add</h2>
 
@@ -388,7 +393,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               )}
             </div>
 
-            {/* Sort dropdown */}
             <div ref={sortRef} className="relative">
               <button onClick={() => setSortOpen(v => !v)}
                 className="flex items-center gap-2 h-11 px-4 rounded-lg border bg-background text-sm font-medium hover:bg-secondary/50 transition-colors whitespace-nowrap">
@@ -409,7 +413,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
               )}
             </div>
 
-            {/* Grid/List toggle */}
             <div className="flex rounded-lg border bg-background p-1 gap-0.5">
               <button onClick={() => setViewMode("grid")}
                 className={cn("p-2 rounded-md transition-colors", viewMode === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}>
@@ -422,14 +425,12 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           </div>
 
-          {/* Results count */}
           {hasSearched && !searchLoading && (
             <p className="text-sm text-muted-foreground mb-4">
               <span className="font-semibold text-foreground">{searchTotal}</span> cards found for "{searchQuery}"
             </p>
           )}
 
-          {/* States */}
           {searchLoading && searchResults.length === 0 && (
             <div className="flex items-center justify-center py-12">
               <Spinner className="h-8 w-8 text-primary" />
@@ -444,7 +445,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           )}
 
-          {/* ── GRID VIEW ── */}
           {searchResults.length > 0 && viewMode === "grid" && (
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {searchResults.map(card => {
@@ -474,7 +474,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                       <p className="text-[11px] text-muted-foreground truncate">{card.set?.name}</p>
                       <p className="text-[11px] text-muted-foreground">#{card.number}</p>
                       <p className="text-xs font-semibold text-primary mt-auto">
-                        {/* SAFE FORMATTING */}
                         {card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}
                       </p>
                     </div>
@@ -484,7 +483,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
           )}
 
-          {/* ── LIST VIEW ── */}
           {searchResults.length > 0 && viewMode === "list" && (
             <div className="flex flex-col divide-y divide-border/50">
               {searchResults.map(card => {
@@ -503,7 +501,6 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
                       {card.rarity && <span className="inline-block mt-0.5 px-1.5 py-px rounded text-[10px] bg-secondary text-muted-foreground">{card.rarity}</span>}
                     </div>
                     <div className="text-right flex-shrink-0">
-                      {/* SAFE FORMATTING */}
                       <p className="text-sm font-semibold text-primary">{card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}</p>
                       <p className="text-[10px] text-muted-foreground">Raw</p>
                     </div>
@@ -527,7 +524,7 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
           )}
         </div>
 
-        {/* ── MY WISHLIST CARDS ─────────────────────────────── */}
+        {/* ── MY WISHLIST CARDS WITH ALERTS ─────────────────────────────── */}
         {safeCards.length > 0 && (
           <>
             <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between mb-5">
@@ -549,49 +546,70 @@ export default function DreamsListPage({ params }: { params: Promise<{ listId: s
             </div>
 
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {sortedWishlistCards.map(card => (
-                <div key={card.id} className="group flex flex-col">
-                  <div className="relative aspect-[2.5/3.5] rounded-lg overflow-hidden shadow-md">
-                    {/* SAFE IMAGE */}
-                    {card.imageSmall && (
-                      <Image src={card.imageSmall} alt={card.name || "Card"} fill
-                        className="object-cover transition-transform duration-200 group-hover:scale-105"
-                        sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
-                    )}
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <button onClick={() => handleRemove(card.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-white rounded-lg text-xs font-medium">
-                        <X className="h-3 w-3" /> Remove
-                      </button>
-                    </div>
-                    {card.quantity > 1 && (
-                      <div className="absolute top-1.5 right-1.5 bg-primary text-primary-foreground text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center shadow">
-                        {card.quantity}
+              {sortedWishlistCards.map(card => {
+                
+                // NEW: Logic Check for Alert!
+                const isAlertTriggered = (card as any).targetPrice != null && card.marketPrice != null && Number(card.marketPrice) <= Number((card as any).targetPrice);
+
+                return (
+                  <div key={card.id} className="group flex flex-col bg-card rounded-xl overflow-hidden border pb-3 transition-colors hover:border-primary/30">
+                    <div className="relative aspect-[2.5/3.5] bg-secondary/20 shadow-sm border-b">
+                      {card.imageSmall && (
+                        <Image src={card.imageSmall} alt={card.name || "Card"} fill
+                          className="object-cover transition-transform duration-200"
+                          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 22vw, 16vw" />
+                      )}
+                      
+                      {/* NEW: THE EXCLAMATION MARK */}
+                      {isAlertTriggered && (
+                        <div 
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg animate-bounce border-2 border-background z-20"
+                          title={`Price dropped to €${card.marketPrice} (Target: €${(card as any).targetPrice})`}
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                        </div>
+                      )}
+
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button onClick={() => handleRemove(card.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive text-white rounded-lg text-xs font-medium">
+                          <X className="h-3 w-3" /> Remove
+                        </button>
                       </div>
-                    )}
+                      {card.quantity > 1 && (
+                        <div className="absolute top-1.5 right-1.5 bg-primary text-primary-foreground text-[11px] font-bold rounded-full h-5 w-5 flex items-center justify-center shadow">
+                          {card.quantity}
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="px-3 pt-3 flex flex-col gap-0.5 flex-1">
+                      <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{card.setName}</p>
+                      <p className="text-[11px] text-muted-foreground">#{card.number}</p>
+                      <p className="text-xs font-semibold text-primary mt-2">
+                        {card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}
+                      </p>
+                      
+                      {/* NEW: Set Target Input */}
+                      <div className="mt-auto pt-2 border-t flex flex-col gap-1.5">
+                        <label className="text-[10px] text-muted-foreground uppercase font-semibold">Target Price Alert</label>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">€</span>
+                          <input 
+                            type="number"
+                            placeholder="0.00"
+                            className="w-full pl-5 pr-2 py-1 text-xs rounded border bg-background focus:outline-ring"
+                            value={(card as any).targetPrice ?? ""}
+                            onChange={(e) => handleUpdateTargetPrice(card.id, e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                    </div>
                   </div>
-                  <div className="mt-2 flex flex-col gap-0.5 min-h-[64px]">
-                    <p className="text-xs font-bold leading-tight truncate">{card.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{card.setName}</p>
-                    <p className="text-[11px] text-muted-foreground">#{card.number}</p>
-                    <p className="text-xs font-semibold text-primary mt-auto">
-                      {/* SAFE FORMATTING */}
-                      {card.marketPrice != null ? `€${Number(card.marketPrice).toFixed(2)}` : "—"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <button onClick={() => handleQuantity(card.id, -1)}
-                      className="h-6 w-6 rounded-md flex items-center justify-center bg-secondary hover:bg-secondary/70 transition-colors">
-                      <Minus className="h-3 w-3" />
-                    </button>
-                    <span className="text-xs font-bold w-5 text-center">{card.quantity}</span>
-                    <button onClick={() => handleQuantity(card.id, 1)}
-                      className="h-6 w-6 rounded-md flex items-center justify-center bg-secondary hover:bg-secondary/70 transition-colors">
-                      <Plus className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </>
         )}
