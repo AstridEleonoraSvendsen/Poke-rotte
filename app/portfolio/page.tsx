@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Header } from "@/components/header"
@@ -42,24 +42,23 @@ interface Portfolio {
   name: string
   createdAt: number
   cards: PortfolioCard[]
-  history: ValueSnapshot[] // NEW: Array to track value over time!
+  history: ValueSnapshot[]
 }
 
-// --- CUSTOM SVG STOCK CHART COMPONENT ---
+// --- MINI STOCK CHART COMPONENT ---
 function PortfolioChart({ history, displayCurrency }: { history: ValueSnapshot[], displayCurrency: Currency }) {
   if (!history || history.length === 0) return null;
 
-  const width = 800;
-  const height = 160;
-  const padding = 20;
+  // Scaled down dimensions for the header row
+  const width = 240;
+  const height = 60;
+  const padding = 10;
 
-  // Convert history values to the currently selected currency
   const data = history.map(h => ({
     date: h.date,
     value: displayCurrency === "EUR" ? h.valueEur : h.valueEur * EUR_TO_DKK
   }));
 
-  // If we only have 1 data point (because they just started tracking), mock a flat line
   const chartData = data.length === 1 
     ? [{ date: data[0].date - 86400000, value: data[0].value }, data[0]] 
     : data;
@@ -72,69 +71,48 @@ function PortfolioChart({ history, displayCurrency }: { history: ValueSnapshot[]
   const rangeVal = maxVal - minVal === 0 ? 1 : maxVal - minVal;
   const rangeDate = maxDate - minDate === 0 ? 1 : maxDate - minDate;
 
-  // Calculate coordinates
-  const points = chartData.map((d, i) => {
+  const points = chartData.map((d) => {
     const x = padding + ((d.date - minDate) / rangeDate) * (width - padding * 2);
     const y = height - padding - ((d.value - minVal) / rangeVal) * (height - padding * 2);
     return `${x},${y}`;
   }).join(" ");
 
-  // Determine trend color
   const isUp = chartData[chartData.length - 1].value >= chartData[0].value;
-  const strokeColor = isUp ? "#22c55e" : "#ef4444"; // Green if up, Red if down
+  const strokeColor = isUp ? "#22c55e" : "#ef4444"; 
   const gradientId = isUp ? "gradUp" : "gradDown";
 
-  // Calculate percentage change
   const startVal = chartData[0].value;
   const currentVal = chartData[chartData.length - 1].value;
   const pctChange = startVal === 0 ? 0 : ((currentVal - startVal) / startVal) * 100;
 
   return (
-    <div className="w-full bg-card border rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row gap-6 items-center">
-      <div className="flex-shrink-0 text-center sm:text-left min-w-[120px]">
-        <p className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-1">All Time Return</p>
-        <div className={cn("flex items-center justify-center sm:justify-start gap-1 text-2xl font-bold", isUp ? "text-green-500" : "text-red-500")}>
-          {isUp ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+    <div className="w-full lg:w-[320px] xl:w-[380px] bg-secondary/30 border rounded-xl p-3 flex items-center gap-4">
+      <div className="flex-shrink-0 min-w-[70px]">
+        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider mb-0.5">Return</p>
+        <div className={cn("flex items-center gap-0.5 text-lg font-bold leading-none", isUp ? "text-green-500" : "text-red-500")}>
+          {isUp ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
           {isUp ? "+" : ""}{pctChange.toFixed(2)}%
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Since {new Date(minDate).toLocaleDateString()}</p>
       </div>
 
-      <div className="flex-1 w-full relative h-[160px]">
+      <div className="flex-1 relative h-[45px]">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
           <defs>
             <linearGradient id="gradUp" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#22c55e" stopOpacity="0.2" />
+              <stop offset="0%" stopColor="#22c55e" stopOpacity="0.3" />
               <stop offset="100%" stopColor="#22c55e" stopOpacity="0" />
             </linearGradient>
             <linearGradient id="gradDown" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.2" />
+              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.3" />
               <stop offset="100%" stopColor="#ef4444" stopOpacity="0" />
             </linearGradient>
           </defs>
-          
-          {/* Fill Area */}
-          <polygon 
-            points={`${padding},${height - padding} ${points} ${width - padding},${height - padding}`}
-            fill={`url(#${gradientId})`}
-          />
-          {/* Line */}
-          <polyline 
-            fill="none" 
-            stroke={strokeColor} 
-            strokeWidth="3" 
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            points={points} 
-            className="drop-shadow-sm"
-          />
-          {/* Current Dot */}
+          <polygon points={`${padding},${height - padding} ${points} ${width - padding},${height - padding}`} fill={`url(#${gradientId})`} />
+          <polyline fill="none" stroke={strokeColor} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" points={points} />
           <circle 
             cx={padding + ((chartData[chartData.length - 1].date - minDate) / rangeDate) * (width - padding * 2)} 
             cy={height - padding - ((chartData[chartData.length - 1].value - minVal) / rangeVal) * (height - padding * 2)} 
-            r="5" 
-            fill={strokeColor} 
-            className="animate-pulse"
+            r="3.5" fill={strokeColor} className="animate-pulse"
           />
         </svg>
       </div>
@@ -164,7 +142,6 @@ export default function PortfolioPage() {
   useEffect(() => {
     const localData = localStorage.getItem("ratPortfolios")
     if (localData) {
-      // Ensure existing portfolios are upgraded to have a history array
       const parsed: Portfolio[] = JSON.parse(localData).map((p: any) => ({
         ...p,
         history: p.history || []
@@ -204,15 +181,7 @@ export default function PortfolioPage() {
   const handleCreatePortfolio = (e: React.FormEvent) => {
     e.preventDefault()
     if (!newPortfolioName.trim()) return
-    
-    const newPort: Portfolio = {
-      id: `port_${Date.now()}`,
-      name: newPortfolioName.trim(),
-      createdAt: Date.now(),
-      cards: [],
-      history: []
-    }
-    
+    const newPort: Portfolio = { id: `port_${Date.now()}`, name: newPortfolioName.trim(), createdAt: Date.now(), cards: [], history: [] }
     savePortfolios([...portfolios, newPort])
     setNewPortfolioName("")
     setIsCreating(false)
@@ -227,9 +196,7 @@ export default function PortfolioPage() {
   }
 
   const runSearch = async (query: string) => {
-    if (query.length < 3) {
-      setSearchResults([]); setIsSearching(false); return
-    }
+    if (query.length < 3) { setSearchResults([]); setIsSearching(false); return }
     setIsSearching(true)
     try {
       const clean = query.replace(/['"*?\\]/g, "").trim()
@@ -253,7 +220,6 @@ export default function PortfolioPage() {
   const getMarketPrice = (apiCard: any) => {
     if (apiCard.cardmarket?.prices?.trendPrice) return apiCard.cardmarket.prices.trendPrice;
     if (apiCard.cardmarket?.prices?.averageSellPrice) return apiCard.cardmarket.prices.averageSellPrice;
-    
     if (apiCard.tcgplayer?.prices) {
       const p = apiCard.tcgplayer.prices;
       const fallback = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p['1stEditionHolofoil']?.market;
@@ -265,7 +231,6 @@ export default function PortfolioPage() {
   const calculateCardValue = (card: PortfolioCard, targetCurrency: Currency) => {
     let baseValue = card.paidPrice !== null ? card.paidPrice : (card.marketPrice || 0)
     let baseCurrency = card.paidPrice !== null ? card.currency : "EUR"
-
     if (baseCurrency === targetCurrency) return baseValue
     if (baseCurrency === "EUR" && targetCurrency === "DKK") return baseValue * EUR_TO_DKK
     if (baseCurrency === "DKK" && targetCurrency === "EUR") return baseValue / EUR_TO_DKK
@@ -278,51 +243,35 @@ export default function PortfolioPage() {
 
   const handleAddCard = (apiCard: any) => {
     if (!activePortfolioId) return
-
     const newCard: PortfolioCard = {
       uniqueId: `c_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      cardId: apiCard.id,
-      name: apiCard.name,
-      number: apiCard.number,
-      rarity: apiCard.rarity || "Unknown Rarity",
-      setId: apiCard.set.id,
-      setName: apiCard.set.name,
-      images: { small: apiCard.images?.small || "" },
-      marketPrice: getMarketPrice(apiCard),
-      paidPrice: null,
-      currency: "EUR",
-      acquiredMethod: "pulled", 
+      cardId: apiCard.id, name: apiCard.name, number: apiCard.number,
+      rarity: apiCard.rarity || "Unknown Rarity", setId: apiCard.set.id, setName: apiCard.set.name,
+      images: { small: apiCard.images?.small || "" }, marketPrice: getMarketPrice(apiCard),
+      paidPrice: null, currency: "EUR", acquiredMethod: "pulled", 
     }
-
     const updated = portfolios.map(p => {
       if (p.id !== activePortfolioId) return p;
       const updatedCards = [...p.cards, newCard];
-      // When adding a card, update the history snapshot for today
       const newTotalEur = calculateTotalValue(updatedCards, "EUR");
       const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
       return { ...p, cards: updatedCards, history: newHistory };
     })
-
     savePortfolios(updated)
     toast.success(`${newCard.name} added to portfolio!`)
-    setIsAddingCard(false)
-    setSearchQuery("")
-    setSearchResults([])
+    setIsAddingCard(false); setSearchQuery(""); setSearchResults([])
   }
 
   const handleSaveCardEdit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingCard || !activePortfolioId) return
-
     const updated = portfolios.map(p => {
       if (p.id !== activePortfolioId) return p
       const updatedCards = p.cards.map(c => c.uniqueId === editingCard.uniqueId ? editingCard : c);
-      // Update history snapshot for today
       const newTotalEur = calculateTotalValue(updatedCards, "EUR");
       const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
       return { ...p, cards: updatedCards, history: newHistory }
     })
-    
     savePortfolios(updated)
     setEditingCard(null)
     toast.success("Card details updated!")
@@ -341,24 +290,18 @@ export default function PortfolioPage() {
     toast.info("Card removed.")
   }
 
-  // --- BACKGROUND SYNC / DYNAMIC PRICE UPDATER ---
   const syncMarketPrices = async () => {
     if (!activePortfolioId) return;
     const p = portfolios.find(p => p.id === activePortfolioId);
-    if (!p || p.cards.length === 0) {
-      toast.info("Add some cards first!");
-      return;
-    }
+    if (!p || p.cards.length === 0) { toast.info("Add some cards first!"); return; }
 
     setIsSyncing(true);
     toast.info("Fetching live market prices...");
 
     try {
-      // Create a batch search query: q=id:card1 OR id:card2 OR id:card3
       const cardIds = Array.from(new Set(p.cards.map(c => c.cardId)));
       const queryParts = cardIds.map(id => `id:${id}`);
       
-      // The API has a limit to query length, so we batch them if > 40 unique cards
       let allFreshCards: any[] = [];
       const batchSize = 40;
       for (let i = 0; i < queryParts.length; i += batchSize) {
@@ -370,29 +313,21 @@ export default function PortfolioPage() {
         if (data.data) allFreshCards = allFreshCards.concat(data.data);
       }
 
-      // Create a lookup map for instant price access
       const freshPriceMap: Record<string, number> = {};
-      allFreshCards.forEach(apiCard => {
-        freshPriceMap[apiCard.id] = getMarketPrice(apiCard);
-      });
+      allFreshCards.forEach(apiCard => { freshPriceMap[apiCard.id] = getMarketPrice(apiCard); });
 
-      // Update the portfolio cards with the fresh prices
       const updatedCards = p.cards.map(card => {
         const freshPrice = freshPriceMap[card.cardId];
-        if (freshPrice !== undefined) {
-          return { ...card, marketPrice: freshPrice };
-        }
+        if (freshPrice !== undefined) return { ...card, marketPrice: freshPrice };
         return card;
       });
 
-      // Log a new snapshot!
       const newTotalEur = calculateTotalValue(updatedCards, "EUR");
       const newHistory = [...(p.history || []), { date: Date.now(), valueEur: newTotalEur }];
 
       const updatedPortfolios = portfolios.map(port => 
         port.id === activePortfolioId ? { ...port, cards: updatedCards, history: newHistory } : port
       );
-
       savePortfolios(updatedPortfolios);
       toast.success("Market prices updated successfully!");
     } catch (err) {
@@ -431,12 +366,7 @@ export default function PortfolioPage() {
               <button onClick={() => setIsCreating(false)} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={handleCreatePortfolio} className="flex flex-col gap-4">
-              <Input 
-                placeholder="e.g., Charizard Collection, Top Hits..." 
-                value={newPortfolioName} 
-                onChange={e => setNewPortfolioName(e.target.value)} 
-                autoFocus
-              />
+              <Input placeholder="e.g., Charizard Collection, Top Hits..." value={newPortfolioName} onChange={e => setNewPortfolioName(e.target.value)} autoFocus />
               <Button type="submit" className="w-full bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">Create</Button>
             </form>
           </div>
@@ -453,13 +383,7 @@ export default function PortfolioPage() {
             <div className="p-4 border-b bg-muted/30">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Search any Pokémon card..." 
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                  autoFocus
-                />
+                <Input placeholder="Search any Pokémon card..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" autoFocus />
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4">
@@ -511,30 +435,8 @@ export default function PortfolioPage() {
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">How did you get it?</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingCard({...editingCard, acquiredMethod: "pulled"})}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-bold transition-all border-2",
-                      editingCard.acquiredMethod === "pulled" 
-                        ? "bg-red-500 border-red-500 text-white shadow-md scale-[1.02]" 
-                        : "bg-transparent border-border text-muted-foreground hover:border-red-500/50"
-                    )}
-                  >
-                    RIPPED
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingCard({...editingCard, acquiredMethod: "purchased"})}
-                    className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-bold transition-all border-2",
-                      editingCard.acquiredMethod === "purchased" 
-                        ? "bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]" 
-                        : "bg-transparent border-border text-muted-foreground hover:border-blue-600/50"
-                    )}
-                  >
-                    PURCHASED
-                  </button>
+                  <button type="button" onClick={() => setEditingCard({...editingCard, acquiredMethod: "pulled"})} className={cn("px-4 py-2 rounded-lg text-sm font-bold transition-all border-2", editingCard.acquiredMethod === "pulled" ? "bg-red-500 border-red-500 text-white shadow-md scale-[1.02]" : "bg-transparent border-border text-muted-foreground hover:border-red-500/50")}>RIPPED</button>
+                  <button type="button" onClick={() => setEditingCard({...editingCard, acquiredMethod: "purchased"})} className={cn("px-4 py-2 rounded-lg text-sm font-bold transition-all border-2", editingCard.acquiredMethod === "purchased" ? "bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]" : "bg-transparent border-border text-muted-foreground hover:border-blue-600/50")}>PURCHASED</button>
                 </div>
               </div>
 
@@ -544,21 +446,8 @@ export default function PortfolioPage() {
                   <span className="text-[10px] font-normal lowercase">(Optional)</span>
                 </label>
                 <div className="flex gap-2">
-                  <Input 
-                    type="number" 
-                    step="0.01"
-                    placeholder={editingCard.marketPrice?.toString() || "0.00"}
-                    value={editingCard.paidPrice !== null ? editingCard.paidPrice : ""}
-                    onChange={e => setEditingCard({
-                      ...editingCard, 
-                      paidPrice: e.target.value === "" ? null : parseFloat(e.target.value)
-                    })}
-                  />
-                  <select 
-                    className="bg-secondary rounded-md px-3 border border-input text-sm font-medium focus:outline-ring"
-                    value={editingCard.currency}
-                    onChange={e => setEditingCard({...editingCard, currency: e.target.value as Currency})}
-                  >
+                  <Input type="number" step="0.01" placeholder={editingCard.marketPrice?.toString() || "0.00"} value={editingCard.paidPrice !== null ? editingCard.paidPrice : ""} onChange={e => setEditingCard({...editingCard, paidPrice: e.target.value === "" ? null : parseFloat(e.target.value)})} />
+                  <select className="bg-secondary rounded-md px-3 border border-input text-sm font-medium focus:outline-ring" value={editingCard.currency} onChange={e => setEditingCard({...editingCard, currency: e.target.value as Currency})}>
                     <option value="EUR">€ EUR</option>
                     <option value="DKK">kr DKK</option>
                   </select>
@@ -567,9 +456,7 @@ export default function PortfolioPage() {
               </div>
 
               <div className="pt-4 flex justify-between items-center border-t">
-                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => {handleRemoveCard(editingCard.uniqueId); setEditingCard(null)}}>
-                  <Trash2 className="h-4 w-4 mr-2" /> Remove
-                </Button>
+                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10" onClick={() => {handleRemoveCard(editingCard.uniqueId); setEditingCard(null)}}><Trash2 className="h-4 w-4 mr-2" /> Remove</Button>
                 <Button type="submit" className="bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">Save Changes</Button>
               </div>
             </form>
@@ -644,6 +531,7 @@ export default function PortfolioPage() {
           </div>
         )}
 
+        {/* --- REFORMATTED ACTIVE PORTFOLIO HEADER --- */}
         {activePortfolioId && activePortfolio && (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <button 
@@ -653,15 +541,27 @@ export default function PortfolioPage() {
               <ArrowLeft className="h-4 w-4" /> Back to Portfolios
             </button>
 
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b pb-6">
-              <div>
-                <h2 className="text-3xl font-bold">{activePortfolio.name}</h2>
+            {/* 3-Column Layout: Title -> Mini-Chart -> Value & Buttons */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 border-b pb-6">
+              
+              {/* Left: Title & Count */}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-3xl font-bold truncate">{activePortfolio.name}</h2>
                 <p className="text-sm text-muted-foreground mt-1">{activePortfolio.cards.length} Cards in collection</p>
               </div>
-              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Portfolio Value</p>
-                  <p className="text-3xl font-bold text-[#4f5f4f]">
+
+              {/* Middle: Compact Sparkline Chart */}
+              {activePortfolio.cards.length > 0 && (
+                <div className="flex-shrink-0 w-full lg:w-auto flex justify-start lg:justify-center">
+                  <PortfolioChart history={activePortfolio.history} displayCurrency={displayCurrency} />
+                </div>
+              )}
+
+              {/* Right: Scaled-Down Value & Buttons */}
+              <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-start sm:items-center lg:items-end xl:items-center gap-4 flex-shrink-0">
+                <div className="text-left sm:text-right">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Portfolio Value</p>
+                  <p className="text-2xl font-bold text-[#4f5f4f]">
                     {displayCurrency === "EUR" ? "€" : "kr "}
                     {calculateTotalValue(activePortfolio.cards, displayCurrency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
@@ -670,82 +570,24 @@ export default function PortfolioPage() {
                   <Button 
                     onClick={syncMarketPrices} 
                     variant="outline" 
+                    size="sm"
                     className="gap-2 flex-1 sm:flex-none border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10"
                     disabled={isSyncing}
                   >
-                    {isSyncing ? <Spinner className="h-4 w-4" /> : <RefreshCw className="h-4 w-4" />}
+                    {isSyncing ? <Spinner className="h-3.5 w-3.5" /> : <RefreshCw className="h-3.5 w-3.5" />}
                     Sync Market
                   </Button>
-                  <Button onClick={() => setIsAddingCard(true)} className="gap-2 flex-1 sm:flex-none bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white">
-                    <Plus className="h-5 w-5"/> Add Card
+                  <Button 
+                    size="sm" 
+                    onClick={() => setIsAddingCard(true)} 
+                    className="gap-2 flex-1 sm:flex-none bg-[#4f5f4f] hover:bg-[#4f5f4f]/90 text-white"
+                  >
+                    <Plus className="h-4 w-4"/> Add Card
                   </Button>
                 </div>
               </div>
+
             </div>
 
-            {/* --- THE STOCK CHART --- */}
-            {activePortfolio.cards.length > 0 && (
-              <PortfolioChart history={activePortfolio.history} displayCurrency={displayCurrency} />
-            )}
-
-            {activePortfolio.cards.length === 0 ? (
-              <div className="text-center py-24 border-2 border-dashed rounded-xl bg-secondary/10 mt-6">
-                <p className="text-muted-foreground font-medium mb-4">This portfolio is empty.</p>
-                <Button onClick={() => setIsAddingCard(true)} variant="outline" className="border-[#4f5f4f] text-[#4f5f4f] hover:bg-[#4f5f4f]/10">Search & Add Cards</Button>
-              </div>
-            ) : (
-              <div className="grid gap-x-4 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 mt-6">
-                {activePortfolio.cards.map(card => {
-                  const cardVal = calculateCardValue(card, displayCurrency)
-                  return (
-                    <div key={card.uniqueId} className="group relative flex flex-col">
-                      <div className="relative aspect-[2.5/3.5] rounded-xl overflow-hidden shadow-sm border bg-secondary/20">
-                        <Image src={card.images.small} alt={card.name} fill className="object-cover" sizes="(max-width: 640px) 45vw, 20vw" />
-                        
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[2px]">
-                          <Button variant="secondary" size="sm" className="gap-2 text-[#4f5f4f]" onClick={() => setEditingCard(card)}>
-                            <Edit className="h-4 w-4" /> Edit Details
-                          </Button>
-                        </div>
-
-                        <div className="absolute bottom-2 left-2 z-10">
-                          {card.acquiredMethod === "pulled" ? (
-                            <span className="bg-red-500 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-sm border border-red-600">
-                              Ripped
-                            </span>
-                          ) : (
-                            <span className="bg-blue-600 text-white text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded shadow-sm border border-blue-700">
-                              Purchased
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="mt-3 flex flex-col px-1">
-                        <p className="text-[13px] font-bold truncate leading-tight">{card.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate leading-none mt-1">{card.setName}</p>
-                        <p className="text-[10px] text-muted-foreground truncate leading-none mt-1 mb-2">{card.rarity}</p>
-                        <div className="flex items-center justify-between mt-auto">
-                          <p className="text-sm font-bold text-[#4f5f4f]">
-                            {displayCurrency === "EUR" ? "€" : "kr "}
-                            {cardVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
-                          {card.paidPrice !== null && (
-                            <span className="text-[9px] text-muted-foreground bg-secondary px-1.5 rounded" title="Custom Value override active">
-                              Custom
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-      </main>
-    </div>
-  )
-}
+            {/* --- CARDS GRID --- */}
+            {activePortfolio.
