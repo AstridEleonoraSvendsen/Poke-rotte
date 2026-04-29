@@ -80,10 +80,8 @@ export default function HomePage() {
               id: found.id,
               name: found.name,
               series: found.series,
-              // Trust our local storage if it already has the bigger "True Master Set" number!
-              totalCards: existingLocal && existingLocal.totalCards > found.total 
-                ? existingLocal.totalCards 
-                : found.total,
+              // Rely on local storage initially, but we will force a correction in the next step
+              totalCards: existingLocal ? existingLocal.totalCards : found.total,
               releaseDate: found.releaseDate,
               logoUrl: found.images?.logo
             }
@@ -118,13 +116,14 @@ export default function HomePage() {
             }
           }
 
-          // B. Fetch True Master Set Total (includes Reverse Holos)
+          // B. Fetch True Master Set Total
           try {
             const setRes = await fetch(`/api/pokemon/sets/${set.id}`);
             if (setRes.ok) {
                const setData = await setRes.json();
-               if (setData.cards && setData.cards.length > set.totalCards) {
-                  set.totalCards = setData.cards.length; // Overwrite with True Total!
+               // THE FIX: We now check if it is !== (different), allowing it to shrink back down!
+               if (setData.cards && setData.cards.length !== set.totalCards) {
+                  set.totalCards = setData.cards.length; // Overwrite with True Total unconditionally
                   updatedTrueTotals = true;
                }
             }
@@ -136,8 +135,8 @@ export default function HomePage() {
         // Save the corrected True Totals!
         if (updatedTrueTotals) {
           setActiveSets([...mappedSets]);
+          saveActiveSets(mappedSets); 
         }
-        saveActiveSets(mappedSets); 
 
       } catch (err) {
         console.error("Background sync failed", err);
@@ -160,7 +159,7 @@ export default function HomePage() {
         id: apiSet.id,
         name: apiSet.name,
         series: apiSet.series,
-        totalCards: apiSet.total || apiSet.printedTotal, // Use official total for search UI
+        totalCards: apiSet.total || apiSet.printedTotal, 
         releaseDate: apiSet.releaseDate,
         logoUrl: apiSet.images?.logo
       }));
@@ -180,7 +179,6 @@ export default function HomePage() {
       return;
     }
     
-    // Close modal & show toast so user knows we are calculating reverse holos
     setIsAddingSet(false);
     setSearchQuery("");
     setSearchResults([]);
@@ -188,7 +186,6 @@ export default function HomePage() {
 
     let finalTotalCards = newSet.totalCards;
     
-    // Fetch the TRUE Master Set total immediately
     try {
        const res = await fetch(`/api/pokemon/sets/${newSet.id}`);
        if (res.ok) {
@@ -217,7 +214,6 @@ export default function HomePage() {
     }
   }
 
-  // Calculate stats for the dashboard using True Totals
   const setsWithStats = activeSets.map((set) => {
     const val = setValues[set.id] || { eur: 0, dkk: 0 };
     const totalVal = displayCurrency === "EUR" 
