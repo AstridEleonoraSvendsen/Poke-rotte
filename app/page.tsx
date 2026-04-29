@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Header } from "@/components/header"
 import { MasterSetCard } from "@/components/master-set-card"
 import { Button } from "@/components/ui/button"
-import { Plus, Search, X, ArrowUpDown } from "lucide-react"
+import { Plus, Search, X, ArrowUpDown, MousePointer2 } from "lucide-react"
 import { PokeballSpinner } from "@/components/ui/pokeball-spinner"
 import { getAllOwnedCounts, getActiveSets, saveActiveSets, type ActiveSet } from "@/lib/collection"
 import { toast } from "sonner"
@@ -23,6 +23,9 @@ export default function HomePage() {
   const [setValues, setSetValues] = useState<Record<string, { eur: number, dkk: number }>>({})
   const [displayCurrency, setDisplayCurrency] = useState<Currency>("EUR")
   
+  // Cursor Toggle State
+  const [cursorPref, setCursorPref] = useState<"fun" | "boring">("fun")
+
   // States for the "Add New Set" popup
   const [isAddingSet, setIsAddingSet] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -34,6 +37,12 @@ export default function HomePage() {
     setOwnedCounts(getAllOwnedCounts())
     const localSets = getActiveSets()
     setActiveSets(localSets)
+
+    // Load Cursor Preference
+    const savedCursor = localStorage.getItem('ratCursor')
+    if (savedCursor === 'boring') {
+      setCursorPref('boring')
+    }
 
     // Calculate Prices from LocalStorage instantly
     const calculatedValues: Record<string, { eur: number, dkk: number }> = {}
@@ -80,7 +89,6 @@ export default function HomePage() {
               id: found.id,
               name: found.name,
               series: found.series,
-              // Rely on local storage initially, but we will force a correction in the next step
               totalCards: existingLocal ? existingLocal.totalCards : found.total,
               releaseDate: found.releaseDate,
               logoUrl: found.images?.logo
@@ -91,7 +99,6 @@ export default function HomePage() {
 
         setActiveSets(mappedSets);
 
-        // Secretly fetch pricing for all sets AND double-check the True Master Set Total
         const freshValues: Record<string, { eur: number, dkk: number }> = {}
         let updatedTrueTotals = false;
 
@@ -121,9 +128,8 @@ export default function HomePage() {
             const setRes = await fetch(`/api/pokemon/sets/${set.id}`);
             if (setRes.ok) {
                const setData = await setRes.json();
-               // THE FIX: We now check if it is !== (different), allowing it to shrink back down!
                if (setData.cards && setData.cards.length !== set.totalCards) {
-                  set.totalCards = setData.cards.length; // Overwrite with True Total unconditionally
+                  set.totalCards = setData.cards.length; 
                   updatedTrueTotals = true;
                }
             }
@@ -132,7 +138,6 @@ export default function HomePage() {
 
         setSetValues(freshValues)
         
-        // Save the corrected True Totals!
         if (updatedTrueTotals) {
           setActiveSets([...mappedSets]);
           saveActiveSets(mappedSets); 
@@ -214,6 +219,18 @@ export default function HomePage() {
     }
   }
 
+  // --- CURSOR TOGGLE LOGIC ---
+  const toggleCursor = () => {
+    const newVal = cursorPref === "fun" ? "boring" : "fun"
+    setCursorPref(newVal)
+    localStorage.setItem("ratCursor", newVal)
+    if (newVal === "fun") {
+      document.documentElement.classList.add("fun-cursor")
+    } else {
+      document.documentElement.classList.remove("fun-cursor")
+    }
+  }
+
   const setsWithStats = activeSets.map((set) => {
     const val = setValues[set.id] || { eur: 0, dkk: 0 };
     const totalVal = displayCurrency === "EUR" 
@@ -236,6 +253,25 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background relative">
       <Header />
+
+      {/* FLOATING CURSOR TOGGLE (Only on the Master Sets Page) */}
+      <div className="fixed right-4 top-1/2 -translate-y-1/2 z-40 hidden sm:flex flex-col items-center gap-2 bg-card/40 backdrop-blur-md p-3 rounded-xl border shadow-sm opacity-50 hover:opacity-100 transition-opacity">
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground text-center leading-tight">Cursor<br/>Setting</span>
+        <button
+          onClick={toggleCursor}
+          className="relative flex h-10 w-10 items-center justify-center rounded-full bg-background hover:bg-secondary transition-colors border shadow-sm"
+          title="Toggle Cursor"
+        >
+           {cursorPref === "fun" ? (
+             <Image src="/pokeball-normal.png" alt="Fun" width={16} height={16} className="object-contain drop-shadow-sm" />
+           ) : (
+             <MousePointer2 className="h-4 w-4 text-muted-foreground" />
+           )}
+        </button>
+        <span className="text-[10px] font-medium text-center text-muted-foreground">
+          {cursorPref === "fun" ? "Fun Rat" : "Boring Rat"}
+        </span>
+      </div>
 
       {/* Add New Set Modal popup */}
       {isAddingSet && (
