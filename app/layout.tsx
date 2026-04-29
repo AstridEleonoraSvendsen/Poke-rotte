@@ -45,15 +45,14 @@ export default function RootLayout({
     <html lang="en">
       <body className="font-sans antialiased">
         
-        {/* --- BULLETPROOF CURSOR INJECTION --- */}
-        <style dangerouslySetInnerHTML={{
+       {/* --- SMART CURSOR INJECTION --- */}
+        <script dangerouslySetInnerHTML={{
           __html: `
-            html, body, * { 
-              cursor: url('/pokeball-normal.png') 16 16, auto !important; 
-            }
-            a, button, [role="button"], input, select, textarea, .cursor-pointer, a *, button * { 
-              cursor: url('/pokeball-hover.png') 16 16, pointer !important; 
-            }
+            try {
+              if (localStorage.getItem('ratCursor') !== 'boring') {
+                document.documentElement.classList.add('fun-cursor');
+              }
+            } catch (e) {}
           `
         }} />
         {/* ------------------------------------ */}
