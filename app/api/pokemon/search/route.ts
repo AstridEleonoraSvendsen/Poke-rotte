@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-// 1. Brought over the list of rarities that DO NOT get reverse holos
+// The exact same rarity safeguards we built for Master Sets
 const NO_REVERSE_HOLO_RARITIES = new Set([
   "Rare Holo EX", "Rare Ultra", "Rare Secret", "Rare Holo GX", "Rare Holo V",
   "Rare Holo VMAX", "Rare VSTAR", "Rare Shiny", "Rare Shiny GX", "Rare Shining",
@@ -10,117 +10,122 @@ const NO_REVERSE_HOLO_RARITIES = new Set([
   "Trainer Gallery Rare Holo",
 ])
 
-function apiHeaders(): HeadersInit {
-  const h: HeadersInit = { "Content-Type": "application/json" }
-  if (process.env.POKEMON_TCG_API_KEY) h["X-Api-Key"] = process.env.POKEMON_TCG_API_KEY
-  return h
+// The exact same era logic to prevent reverse holos in vintage sets
+function setSupportsReverseHolos(series?: string, setName?: string) {
+  if (!series || !setName) return true;
+  if (series === "Gym" || series === "Neo" || series === "e-Card") {
+     if (series === "Gym" || series === "Neo") return false;
+  }
+  if (series === "Base" && setName !== "Legendary Collection") return false;
+  return true;
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const query = searchParams.get("q")?.trim() ?? ""
+  const q = searchParams.get("q")
   const sort = searchParams.get("sort") || "releaseDate-desc"
-  const page = parseInt(searchParams.get("page") || "1")
-  const pageSize = 24 // We ask the API for 24 base cards, but we might return up to 48 if they all have reverse holos
+  const page = searchParams.get("page") || "1"
+  const pageSize = 30 
 
-  if (query.length < 2) {
-    return NextResponse.json({ cards: [], total: 0, page: 1, pageSize, hasMore: false })
+  if (!q) {
+    return NextResponse.json({ cards: [], total: 0, hasMore: false })
   }
 
-  const orderByMap: Record<string, string> = {
-    "releaseDate-desc": "-set.releaseDate",
-    "releaseDate-asc":  "set.releaseDate",
-    "price-desc":       "-cardmarket.prices.averageSellPrice",
-    "price-asc":        "cardmarket.prices.averageSellPrice",
-  }
-  const orderBy = orderByMap[sort] || "-set.releaseDate"
-
-  const clean = query.replace(/['"*?\\]/g, "").trim()
-  const base = `https://api.pokemontcg.io/v2/cards?orderBy=${encodeURIComponent(orderBy)}&pageSize=${pageSize}&page=${page}`
-  const url = `${base}&q=name:${clean}*`
+  // Map frontend sort to official TCG API format
+  let apiSort = "-set.releaseDate"
+  if (sort === "releaseDate-desc") apiSort = "-set.releaseDate"
+  if (sort === "releaseDate-asc") apiSort = "set.releaseDate"
+  if (sort === "price-desc") apiSort = "-cardmarket.prices.trendPrice"
+  if (sort === "price-asc") apiSort = "cardmarket.prices.trendPrice"
 
   try {
-    const res = await fetch(url, { headers: apiHeaders(), cache: "no-store" })
+    const apiKey = process.env.POKEMON_TCG_API_KEY
+    const headers: HeadersInit = { "Content-Type": "application/json" }
+    if (apiKey) headers["X-Api-Key"] = apiKey
+
+    // Clean up the query and wrap it in asterisks for broad searching
+    const searchQuery = `name:"*${q.replace(/['"*?\\]/g, "").trim()}*"`
+
+    const res = await fetch(
+      `https://api.pokemontcg.io/v2/cards?q=${encodeURIComponent(searchQuery)}&orderBy=${apiSort}&pageSize=${pageSize}&page=${page}`,
+      { headers, cache: "no-store" }
+    )
 
     if (!res.ok) {
-      const txt = await res.text()
-      console.error("Search API error:", res.status, txt)
-      return NextResponse.json({ error: "Search failed", detail: txt }, { status: 500 })
+      return NextResponse.json({ error: "Failed to fetch from TCG API" }, { status: res.status })
     }
 
     const data = await res.json()
-    const rawCards = data.data || []
+    const apiCards = data.data || []
     
-    // 2. The Cloning Engine: Create an array to hold both standard and reverse holos
-    const processedCards: any[] = []
+    const finalCards: any[] = []
 
-    for (const card of rawCards) {
-      // Get the set's printed total (fallback to 999 if unknown so old promos don't break)
-      const printedTotal = card.set?.printedTotal || 999
-      const num = parseInt(card.number.replace(/\D/g, "")) || 0
-      const rarity = card.rarity || "Unknown"
+    for (const card of apiCards) {
+      // 1. Resolve Best Market Price (Using our TCGPlayer fallback logic)
+      let marketPrice = null;
+      if (card.cardmarket?.prices?.trendPrice) marketPrice = card.cardmarket.prices.trendPrice;
+      else if (card.cardmarket?.prices?.averageSellPrice) marketPrice = card.cardmarket.prices.averageSellPrice;
+      else if (card.tcgplayer?.prices) {
+         const p = card.tcgplayer.prices;
+         marketPrice = p.holofoil?.market || p.normal?.market || p.reverseHolofoil?.market || p['1stEditionHolofoil']?.market || null;
+      }
 
-      // Always push the standard card
-      processedCards.push({
+      const standardCard = {
         id: card.id,
         name: card.name,
         number: card.number,
-        rarity: rarity,
+        rarity: card.rarity || "Unknown",
         supertype: card.supertype,
         subtypes: card.subtypes || [],
-        variant: "standard",
-        isReverseHolo: false,
         set: {
-          id: card.set?.id,
-          name: card.set?.name,
-          series: card.set?.series,
-          releaseDate: card.set?.releaseDate,
+          id: card.set.id,
+          name: card.set.name,
+          series: card.set.series,
+          releaseDate: card.set.releaseDate,
         },
-        images: card.images,
-        marketPrice:
-          card.cardmarket?.prices?.trendPrice ??
-          card.cardmarket?.prices?.averageSellPrice ??
-          null,
-      })
+        images: {
+          small: card.images?.small || "",
+          large: card.images?.large || "",
+        },
+        marketPrice
+      }
+      
+      // Push the standard card to results
+      finalCards.push(standardCard)
 
-      // If the card is part of the main set (not a secret rare) AND its rarity allows it...
-      if (num <= printedTotal && !NO_REVERSE_HOLO_RARITIES.has(rarity)) {
-        // Push the cloned Reverse Holo card right underneath it!
-        processedCards.push({
+      // 2. Strict Reverse Holo Generation Check!
+      const num = parseInt(card.number.replace(/\D/g, "")) || 0
+      const printedTotal = card.set.printedTotal || 0
+      const supportsReverses = setSupportsReverseHolos(card.set.series, card.set.name)
+
+      // ONLY clone if it passes all rarity and era checks, AND is within the standard set numbering
+      if (supportsReverses && num <= printedTotal && !NO_REVERSE_HOLO_RARITIES.has(card.rarity)) {
+        
+        let revPrice = null;
+        if (card.tcgplayer?.prices?.reverseHolofoil?.market) {
+           revPrice = card.tcgplayer.prices.reverseHolofoil.market;
+        } else {
+           revPrice = marketPrice; 
+        }
+
+        finalCards.push({
+          ...standardCard,
           id: `${card.id}-reverse`,
-          name: `${card.name} Reverse Holo`,
-          number: card.number,
-          rarity: "Reverse Holo",
-          supertype: card.supertype,
-          subtypes: card.subtypes || [],
-          variant: "reverse_holo",
-          isReverseHolo: true,
-          set: {
-            id: card.set?.id,
-            name: card.set?.name,
-            series: card.set?.series,
-            releaseDate: card.set?.releaseDate,
-          },
-          images: card.images,
-          marketPrice:
-            card.cardmarket?.prices?.reverseHoloTrend ??
-            card.cardmarket?.prices?.reverseHoloSell ??
-            null, // Try to grab the specific Reverse Holo price if available!
+          name: `${card.name}`,
+          rarity: "Reverse Holo", // This gives it the proper Reverse Holo tag on the UI!
+          marketPrice: revPrice
         })
       }
     }
 
     return NextResponse.json({
-      cards: processedCards,
-      // The total is tricky now because we artificially doubled the results, 
-      // but we still rely on the API's pagination of the BASE cards.
-      total: data.totalCount ?? rawCards.length, 
-      page,
-      pageSize,
-      hasMore: (data.totalCount ?? 0) > page * pageSize,
+      cards: finalCards,
+      total: data.totalCount || 0,
+      hasMore: (data.page * data.pageSize) < data.totalCount
     })
+
   } catch (err) {
-    console.error("Search route error:", err)
-    return NextResponse.json({ error: "Search failed" }, { status: 500 })
+    console.error("Search API Error:", err)
+    return NextResponse.json({ error: "Failed to search cards" }, { status: 500 })
   }
 }
