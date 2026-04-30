@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-// The exact same rarity safeguards we built for Master Sets
+// Added "Promo" to the strict ban list!
 const NO_REVERSE_HOLO_RARITIES = new Set([
   "Rare Holo EX", "Rare Ultra", "Rare Secret", "Rare Holo GX", "Rare Holo V",
   "Rare Holo VMAX", "Rare VSTAR", "Rare Shiny", "Rare Shiny GX", "Rare Shining",
@@ -8,11 +8,15 @@ const NO_REVERSE_HOLO_RARITIES = new Set([
   "Double Rare", "Illustration Rare", "Special Illustration Rare", "Hyper Rare",
   "Ultra Rare", "Shiny Rare", "Shiny Ultra Rare", "ACE SPEC Rare",
   "Trainer Gallery Rare Holo",
+  "Promo" // <-- FIXED: Promos do not have reverse holos!
 ])
 
-// The exact same era logic to prevent reverse holos in vintage sets
 function setSupportsReverseHolos(series?: string, setName?: string) {
   if (!series || !setName) return true;
+  
+  // FIXED: Blanket ban on any set that is a Promo set
+  if (series.includes("Promo") || setName.includes("Promo")) return false;
+  
   if (series === "Gym" || series === "Neo" || series === "e-Card") {
      if (series === "Gym" || series === "Neo") return false;
   }
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
     const finalCards: any[] = []
 
     for (const card of apiCards) {
-      // 1. Resolve Best Market Price (Using our TCGPlayer fallback logic)
+      // 1. Resolve Best Market Price
       let marketPrice = null;
       if (card.cardmarket?.prices?.trendPrice) marketPrice = card.cardmarket.prices.trendPrice;
       else if (card.cardmarket?.prices?.averageSellPrice) marketPrice = card.cardmarket.prices.averageSellPrice;
@@ -111,8 +115,8 @@ export async function GET(request: Request) {
         finalCards.push({
           ...standardCard,
           id: `${card.id}-reverse`,
-          name: `${card.name}`,
-          rarity: "Reverse Holo", // This gives it the proper Reverse Holo tag on the UI!
+          name: `${card.name} Reverse Holo`, // <-- FIXED: Restored the Reverse Holo label!
+          rarity: "Reverse Holo", 
           marketPrice: revPrice
         })
       }
