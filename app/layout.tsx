@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { Toaster } from 'sonner'
 import { SiteFooter } from "@/components/site-footer"
+import { ClerkProvider } from '@clerk/nextjs' // <-- Added Clerk import
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -42,32 +43,35 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className="font-sans antialiased">
-        
-       {/* --- SMART CURSOR INJECTION --- */}
-        <script dangerouslySetInnerHTML={{
-          __html: `
-            try {
-              if (localStorage.getItem('ratCursor') !== 'boring') {
-                document.documentElement.classList.add('fun-cursor');
-              }
-            } catch (e) {}
-          `
-        }} />
-        {/* ------------------------------------ */}
+    // <-- Wrapped the entire app in ClerkProvider
+    <ClerkProvider>
+      <html lang="en">
+        <body className="font-sans antialiased">
+          
+         {/* --- SMART CURSOR INJECTION --- */}
+          <script dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                if (localStorage.getItem('ratCursor') !== 'boring') {
+                  document.documentElement.classList.add('fun-cursor');
+                }
+              } catch (e) {}
+            `
+          }} />
+          {/* ------------------------------------ */}
 
-        {/* Wrapper to push footer to the bottom */}
-        <div className="flex min-h-screen flex-col">
-          <main className="flex-1">
-            {children}
-          </main>
-          <SiteFooter />
-        </div>
+          {/* Wrapper to push footer to the bottom */}
+          <div className="flex min-h-screen flex-col">
+            <main className="flex-1">
+              {children}
+            </main>
+            <SiteFooter />
+          </div>
 
-        <Toaster position="top-center" richColors />
-        <Analytics />
-      </body>
-    </html>
+          <Toaster position="top-center" richColors />
+          <Analytics />
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }
