@@ -13,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+// Import Clerk components
+import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -20,7 +22,7 @@ export function Header() {
 
   const navItems = [
     { href: "/", label: "Master Sets", external: false },
-    { href: "/portfolio", label: "Portfolios", external: false }, // <-- Added Portfolios!
+    { href: "/portfolio", label: "Portfolios", external: false },
     { href: "/database", label: "Card Database", external: false },
     { href: "/dreams", label: "Poke Dreams", external: false },
     { href: "https://www.cardmarket.com/en/Pokemon", label: "Rat Market", external: true },
@@ -96,8 +98,8 @@ export function Header() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Pikachu Icon Replacing the old Search button shell */}
+        <div className="flex items-center gap-4">
+          {/* Pikachu Icon */}
           <Link href="/database" className="relative h-10 w-10 hover:scale-110 transition-transform">
             <Image 
               src="/pikachu.png" 
@@ -107,6 +109,21 @@ export function Header() {
               sizes="40px"
             />
           </Link>
+
+          {/* Clerk Auth Buttons */}
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="bg-[#4f5f4f] text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-[#4f5f4f]/90 transition-all shadow-sm">
+                Log In
+              </button>
+            </SignInButton>
+          </SignedOut>
+          
+          <SignedIn>
+            <div className="h-9 w-9 overflow-hidden rounded-full border border-border shadow-sm">
+              <UserButton afterSignOutUrl="/" />
+            </div>
+          </SignedIn>
         </div>
       </div>
     </header>
